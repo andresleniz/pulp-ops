@@ -1,0 +1,40 @@
+{
+  "name": "pulp-ops",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev --name init",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:reset": "prisma migrate reset --force && tsx prisma/seed.ts",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.13.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
+    "decimal.js": "^10.4.3",
+    "lucide-react": "^0.383.0",
+    "next": "^16.2.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^3.8.1",
+    "tailwind-merge": "^2.3.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8",
+    "prisma": "^5.13.0",
+    "tailwindcss": "^3.4.3",
+    "tsx": "^4.11.0",
+    "typescript": "^5"
+  }
+}

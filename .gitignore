@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+node-v24.14.1-win-x64/
+node-v24.14.1-win-x64.zip
+
+# Next.js
+.next/
+out/
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Database
+prisma/*.db
+prisma/*.db-shm
+prisma/*.db-wal
+
+# SQLite migrations (replaced by PostgreSQL)
+prisma/migrations/
+
+# Build artifacts
+build/
+
+# OS
+.DS_Store
+Thumbs.db

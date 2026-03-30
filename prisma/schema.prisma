@@ -1,0 +1,477 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PriceStatus {
+  not_started
+  negotiating
+  decided
+  revised
+}
+
+enum CommStatus {
+  not_needed
+  pending
+  drafted
+  sent
+  confirmed
+}
+
+enum OrderStatus {
+  none
+  discussed
+  agreed
+  ordered
+  shipped
+  closed
+}
+
+enum CycleStatus {
+  open
+  in_progress
+  awaiting_confirmation
+  closed
+  on_hold
+}
+
+enum EmailDraftStatus {
+  pending
+  draft_ready
+  sent
+  confirmed
+  corrected
+  resent
+}
+
+enum TaskType {
+  missing_price
+  missing_index
+  pending_announcement
+  pending_confirmation
+  hold_review
+  negotiation_followup
+}
+
+enum TaskStatus {
+  open
+  in_progress
+  resolved
+  dismissed
+}
+
+enum TaskPriority {
+  high
+  med
+  low
+}
+
+enum NegotiationStatus {
+  open
+  agreed
+  rejected
+  pending
+  withdrawn
+}
+
+enum PricingMethod {
+  manual
+  index_formula
+  subgroup_adjustment
+  customer_override
+}
+
+enum ConfirmationType {
+  verbal
+  email
+  order
+}
+
+enum AdjustmentType {
+  flat
+  formula_override
+  subgroup
+  verbal_only
+  no_announcement
+  delayed_start
+}
+
+model Region {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  markets   Market[]
+  createdAt DateTime @default(now())
+}
+
+model Market {
+  id                   String   @id @default(cuid())
+  name                 String   @unique
+  regionId             String
+  region               Region   @relation(fields: [regionId], references: [id])
+  requiresAnnouncement Boolean  @default(false)
+  communicationType    String   @default("email")
+  agentId              String?
+  agent                Agent?   @relation(fields: [agentId], references: [id])
+  isActive             Boolean  @default(true)
+  notes                String?
+
+  customers      Customer[]
+  mills          Mill[]
+  cycles         MonthlyCycle[]
+  pricingRules   PricingRule[]
+  emailTemplates EmailTemplate[]
+  negotiations   NegotiationEvent[]
+  subgroups      Subgroup[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Agent {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  company     String?
+  markets     Market[]
+  emailDrafts EmailDraft[]
+  createdAt   DateTime @default(now())
+}
+
+model Customer {
+  id              String   @id @default(cuid())
+  name            String
+  marketId        String
+  market          Market   @relation(fields: [marketId], references: [id])
+  subgroupId      String?
+  subgroup        Subgroup? @relation(fields: [subgroupId], references: [id])
+  isDirectContact Boolean  @default(false)
+  contactEmail    String?
+  notes           String?
+
+  mills         Mill[]
+  exceptions    CustomerException[]
+  negotiations  NegotiationEvent[]
+  orders        OrderRecord[]
+  emailDrafts   EmailDraft[]
+  monthlyPrices MonthlyPrice[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Subgroup {
+  id           String   @id @default(cuid())
+  name         String
+  marketId     String
+  market       Market   @relation(fields: [marketId], references: [id])
+  description  String?
+  customers    Customer[]
+  pricingRules PricingRule[]
+  createdAt    DateTime @default(now())
+}
+
+model Mill {
+  id         String    @id @default(cuid())
+  name       String
+  marketId   String
+  market     Market    @relation(fields: [marketId], references: [id])
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  location   String?
+
+  pricingRules  PricingRule[]
+  monthlyPrices MonthlyPrice[]
+  orders        OrderRecord[]
+
+  createdAt DateTime @default(now())
+}
+
+model Fiber {
+  id   String @id @default(cuid())
+  code String @unique
+  name String
+  unit String @default("USD/ADT")
+
+  pricingRules  PricingRule[]
+  monthlyPrices MonthlyPrice[]
+  negotiations  NegotiationEvent[]
+  orders        OrderRecord[]
+  exceptions    CustomerException[]
+
+  createdAt DateTime @default(now())
+}
+
+model IndexDefinition {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  description String?
+  unit        String       @default("USD/ADT")
+  values      IndexValue[]
+  createdAt   DateTime     @default(now())
+}
+
+model IndexValue {
+  id              String          @id @default(cuid())
+  indexId         String
+  index           IndexDefinition @relation(fields: [indexId], references: [id])
+  month           String
+  value           Decimal
+  publicationDate DateTime?
+  source          String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@unique([indexId, month])
+}
+
+model PricingRule {
+  id                String        @id @default(cuid())
+  marketId          String
+  market            Market        @relation(fields: [marketId], references: [id])
+  fiberId           String
+  fiber             Fiber         @relation(fields: [fiberId], references: [id])
+  millId            String?
+  mill              Mill?         @relation(fields: [millId], references: [id])
+  subgroupId        String?
+  subgroup          Subgroup?     @relation(fields: [subgroupId], references: [id])
+  method            PricingMethod
+  formulaExpression String?
+  formulaReadable   String?
+  manualPrice       Decimal?
+  adjustment        Decimal?
+  priority          Int           @default(99)
+  activeFrom        String
+  activeTo          String?
+  notes             String?
+  isActive          Boolean       @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([marketId, fiberId])
+}
+
+model CustomerException {
+  id              String         @id @default(cuid())
+  customerId      String
+  customer        Customer       @relation(fields: [customerId], references: [id])
+  fiberId         String
+  fiber           Fiber          @relation(fields: [fiberId], references: [id])
+  adjustmentType  AdjustmentType
+  flatAdjustment  Decimal?
+  formulaOverride String?
+  noAnnouncement  Boolean        @default(false)
+  verbalOnly      Boolean        @default(false)
+  delayedStart    String?
+  notes           String?
+  activeFrom      String
+  activeTo        String?
+
+  createdAt DateTime @default(now())
+}
+
+model MonthlyCycle {
+  id                   String            @id @default(cuid())
+  month                String
+  marketId             String
+  market               Market            @relation(fields: [marketId], references: [id])
+  cycleStatus          CycleStatus       @default(open)
+  priceStatus          PriceStatus       @default(not_started)
+  commStatus           CommStatus        @default(pending)
+  orderStatus          OrderStatus       @default(none)
+  onHold               Boolean           @default(false)
+  holdReason           String?
+  holdReviewDate       DateTime?
+  confirmationType     ConfirmationType?
+  confirmationReceived Boolean           @default(false)
+  confirmationDate     DateTime?
+  confirmationRef      String?
+  owner                String            @default("Andrés")
+  internalNotes        String?
+  externalNotes        String?
+  closedAt             DateTime?
+
+  monthlyPrices MonthlyPrice[]
+  emailDrafts   EmailDraft[]
+  tasks         Task[]
+  negotiations  NegotiationEvent[]
+  orders        OrderRecord[]
+  snapshot      Snapshot?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([month, marketId])
+  @@index([month])
+}
+
+model MonthlyPrice {
+  id              String        @id @default(cuid())
+  cycleId         String
+  cycle           MonthlyCycle  @relation(fields: [cycleId], references: [id])
+  marketId        String
+  fiberId         String
+  fiber           Fiber         @relation(fields: [fiberId], references: [id])
+  millId          String?
+  mill            Mill?         @relation(fields: [millId], references: [id])
+  customerId      String?
+  customer        Customer?     @relation(fields: [customerId], references: [id])
+  price           Decimal?
+  pricingMethod   PricingMethod?
+  formulaSnapshot String?
+  isOverride      Boolean       @default(false)
+  overrideReason  String?
+  indexSnapshot   Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+ @@unique([cycleId, fiberId, millId, customerId], map: "monthly_price_unique")
+  @@index([cycleId])
+}
+
+model EmailTemplate {
+  id              String   @id @default(cuid())
+  templateKey     String
+  version         Int      @default(1)
+  marketId        String?
+  market          Market?  @relation(fields: [marketId], references: [id])
+  subjectTemplate String
+  bodyTemplate    String
+  isActive        Boolean  @default(true)
+  notes           String?
+
+  emailDrafts EmailDraft[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([templateKey, version])
+}
+
+model EmailDraft {
+  id           String           @id @default(cuid())
+  month        String
+  cycleId      String
+  cycle        MonthlyCycle     @relation(fields: [cycleId], references: [id])
+  templateId   String?
+  template     EmailTemplate?   @relation(fields: [templateId], references: [id])
+  marketId     String?
+  customerId   String?
+  customer     Customer?        @relation(fields: [customerId], references: [id])
+  agentId      String?
+  agent        Agent?           @relation(fields: [agentId], references: [id])
+  subject      String
+  body         String
+  recipientsTo String
+  recipientsCc String
+  status       EmailDraftStatus @default(pending)
+  sentAt       DateTime?
+  confirmedAt  DateTime?
+  notes        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cycleId])
+}
+
+model Task {
+  id         String        @id @default(cuid())
+  month      String
+  cycleId    String?
+  cycle      MonthlyCycle? @relation(fields: [cycleId], references: [id])
+  marketId   String?
+  customerId String?
+  type       TaskType
+  dueDate    DateTime?
+  priority   TaskPriority  @default(med)
+  status     TaskStatus    @default(open)
+  notes      String?
+  resolvedAt DateTime?
+  resolvedBy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([month, status])
+}
+
+model NegotiationEvent {
+  id             String            @id @default(cuid())
+  date           DateTime
+  month          String
+  marketId       String
+  market         Market            @relation(fields: [marketId], references: [id])
+  cycleId        String?
+  cycle          MonthlyCycle?     @relation(fields: [cycleId], references: [id])
+  customerId     String?
+  customer       Customer?         @relation(fields: [customerId], references: [id])
+  fiberId        String
+  fiber          Fiber             @relation(fields: [fiberId], references: [id])
+  discussedPrice Decimal?
+  status         NegotiationStatus @default(open)
+  summary        String?
+  nextStep       String?
+  owner          String            @default("Andrés")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([marketId, month])
+}
+
+model OrderRecord {
+  id         String       @id @default(cuid())
+  month      String
+  cycleId    String
+  cycle      MonthlyCycle @relation(fields: [cycleId], references: [id])
+  customerId String
+  customer   Customer     @relation(fields: [customerId], references: [id])
+  fiberId    String
+  fiber      Fiber        @relation(fields: [fiberId], references: [id])
+  millId     String?
+  mill       Mill?        @relation(fields: [millId], references: [id])
+  volume     Decimal
+  price      Decimal
+  status     OrderStatus  @default(agreed)
+  reference  String?
+  notes      String?
+  freightPerAdmt Decimal?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cycleId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  entity    String
+  entityId  String
+  field     String
+  oldValue  String?
+  newValue  String?
+  changedBy String   @default("system")
+  changedAt DateTime @default(now())
+  marketId  String?
+  month     String?
+  metadata  Json?
+
+  @@index([entity, entityId])
+  @@index([changedAt])
+}
+
+model Snapshot {
+  id        String       @id @default(cuid())
+  cycleId   String       @unique
+  cycle     MonthlyCycle @relation(fields: [cycleId], references: [id])
+  month     String
+  marketId  String
+  payload   Json
+  createdAt DateTime     @default(now())
+  createdBy String       @default("system")
+}
