@@ -294,7 +294,7 @@ export default async function MarketDetailPage({
                     <div className="flex items-center justify-between px-3 py-2 bg-gray-50">
                       <div>
                         <p className="text-sm font-medium">{d.subject}</p>
-                        <p className="text-xs text-gray-400">To: {d.recipientsTo.join(", ")}</p>
+                        <p className="text-xs text-gray-400">To: {d.recipientsTo}</p>
                       </div>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${d.status === "sent" ? "bg-blue-100 text-blue-700" : d.status === "confirmed" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
                         {d.status}
