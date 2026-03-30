@@ -34,14 +34,12 @@ async function getPriorPrice(
   })
   if (!priorCycle) return null
 
-  const price = await prisma.monthlyPrice.findUnique({
+  const price = await prisma.monthlyPrice.findFirst({
     where: {
-      cycleId_fiberId_millId_customerId: {
-        cycleId: priorCycle.id,
-        fiberId,
-        millId: millId ?? null,
-        customerId: null,
-      },
+      cycleId: priorCycle.id,
+      fiberId,
+      millId: millId ?? null,
+      customerId: null,
     },
   })
   return price?.price ? Number(price.price) : null

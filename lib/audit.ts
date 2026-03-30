@@ -24,7 +24,7 @@ export async function logAudit(params: AuditParams): Promise<void> {
       changedAt: new Date(),
       marketId: params.marketId ?? null,
       month: params.month ?? null,
-      metadata: params.metadata ? params.metadata : undefined,
+      metadata: params.metadata ? (params.metadata as object) : undefined,
     },
   })
 }

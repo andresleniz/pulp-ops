@@ -53,10 +53,10 @@ export function FreightChangeChart({ data, locations }: Props) {
             tickFormatter={(v) => `${v > 0 ? "+" : ""}${v}%`}
           />
           <Tooltip
-            formatter={(value: number, name: string) => [
-              `${value > 0 ? "+" : ""}${value.toFixed(1)}%`,
-              name,
-            ]}
+            formatter={(value, name) => {
+              const n = Number(value)
+              return [`${n > 0 ? "+" : ""}${n.toFixed(1)}%`, name]
+            }}
             contentStyle={{ fontSize: 11, borderRadius: 6, border: "1px solid #e5e7eb" }}
           />
           <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />

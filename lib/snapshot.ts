@@ -33,7 +33,7 @@ async function createSnapshot(cycleId: string): Promise<void> {
 
   const emailsSent = cycle.emailDrafts
     .filter((d: { status: string }) => d.status === "sent" || d.status === "confirmed")
-    .map((d: { subject: string; recipientsTo: string[]; sentAt: unknown }) => ({
+    .map((d: { subject: string; recipientsTo: string; sentAt: unknown }) => ({
       subject: d.subject,
       to: d.recipientsTo,
       sentAt: d.sentAt,
