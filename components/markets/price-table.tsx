@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { applyPriceOverride, addPriceRow, setStandardPrices } from "@/app/markets/[id]/actions"
 
 interface PriceRow {
@@ -37,6 +38,7 @@ interface Props {
 }
 
 export function PriceTable({ prices, cycleId, customers, fibers }: Props) {
+  const router = useRouter()
   const [overrideRow, setOverrideRow] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [showStandard, setShowStandard] = useState(false)
@@ -54,9 +56,10 @@ export function PriceTable({ prices, cycleId, customers, fibers }: Props) {
     fd.append("fiberId", row.fiberId)
     if (row.millId) fd.append("millId", row.millId)
     if (row.customerId) fd.append("customerId", row.customerId)
-    startTransition(() => {
-      applyPriceOverride(fd)
+    startTransition(async () => {
+      await applyPriceOverride(fd)
       setOverrideRow(null)
+      router.refresh()
     })
   }
 
@@ -64,9 +67,10 @@ export function PriceTable({ prices, cycleId, customers, fibers }: Props) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     fd.append("cycleId", cycleId)
-    startTransition(() => {
-      addPriceRow(fd)
+    startTransition(async () => {
+      await addPriceRow(fd)
       setShowAdd(false)
+      router.refresh()
     })
   }
 
@@ -76,10 +80,11 @@ export function PriceTable({ prices, cycleId, customers, fibers }: Props) {
       .map((f) => ({ fiberId: f.id, price: parseFloat(standardInputs[f.id] ?? "") }))
       .filter((e) => !isNaN(e.price) && e.price > 0)
     if (entries.length === 0) return
-    startTransition(() => {
-      setStandardPrices(cycleId, entries)
+    startTransition(async () => {
+      await setStandardPrices(cycleId, entries)
       setShowStandard(false)
       setStandardInputs({})
+      router.refresh()
     })
   }
 
