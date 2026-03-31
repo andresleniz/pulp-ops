@@ -1,0 +1,9 @@
+.vs/
+.claude/
+*.db
+*.db-journal
+prisma/pulp_ops.db
+setup-sqlite.ps1
+start.bat
+tsconfig.tsbuildinfo
+package-LAPTOP-*.json

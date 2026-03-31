@@ -2,10 +2,8 @@ import { prisma } from "@/lib/prisma"
 import { saveIndexValue, triggerRecalculate } from "./actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import IndexUploader from "./IndexUploader"
-import dynamic from "next/dynamic"
+import IndexChartsClient from "./IndexChartsClient"
 import type { ChartGroup } from "./IndexCharts"
-
-const IndexCharts = dynamic(() => import("./IndexCharts"), { ssr: false })
 
 export default async function IndexesPage() {
   const definitions = await prisma.indexDefinition.findMany({
@@ -74,7 +72,7 @@ export default async function IndexesPage() {
         </p>
       </div>
 
-      <IndexCharts groups={chartGroups} />
+      <IndexChartsClient groups={chartGroups} />
 
       <div className="grid grid-cols-3 gap-6">
         <div className="col-span-2 space-y-4">
