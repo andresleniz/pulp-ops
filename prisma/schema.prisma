@@ -34,6 +34,7 @@ model Market {
   negotiations         NegotiationEvent[]
   pricingRules         PricingRule[]
   subgroups            Subgroup[]
+  contacts             MarketContact[]
 }
 
 model Agent {
@@ -44,6 +45,16 @@ model Agent {
   createdAt   DateTime     @default(now())
   emailDrafts EmailDraft[]
   markets     Market[]
+}
+
+model MarketContact {
+  id        String   @id @default(cuid())
+  marketId  String
+  name      String
+  email     String
+  role      String?
+  createdAt DateTime @default(now())
+  market    Market   @relation(fields: [marketId], references: [id])
 }
 
 model Customer {
