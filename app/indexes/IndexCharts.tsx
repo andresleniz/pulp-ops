@@ -71,7 +71,7 @@ export default function IndexCharts({ groups }: { groups: ChartGroup[] }) {
                   {group.series.map((s, i) => (
                     <Line
                       key={s.name}
-                      type="monotone"
+                      type={group.title === "PIX China" ? "stepAfter" : "monotone"}
                       dataKey={s.name}
                       stroke={COLORS[i % COLORS.length]}
                       dot={false}
