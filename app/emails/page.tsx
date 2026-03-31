@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { markSent, updateBody } from "./actions"
+import { markSent, updateBody, deleteDraft } from "./actions"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import EmailComposer from "./EmailComposer"
 
@@ -13,9 +13,10 @@ const statusStyle: Record<string, string> = {
 }
 
 export default async function EmailsPage() {
-  const [markets, allContacts, drafts] = await Promise.all([
+  const [markets, allContacts, fibers, drafts] = await Promise.all([
     prisma.market.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.marketContact.findMany({ orderBy: { name: "asc" } }),
+    prisma.fiber.findMany({ orderBy: { code: "asc" }, select: { code: true, name: true } }),
     prisma.emailDraft.findMany({
       orderBy: { createdAt: "desc" },
       take: 50,
@@ -37,7 +38,7 @@ export default async function EmailsPage() {
       <div className="grid grid-cols-3 gap-6">
         {/* Left: composer + contacts */}
         <div className="col-span-1">
-          <EmailComposer markets={markets} allContacts={allContacts} />
+          <EmailComposer markets={markets} allContacts={allContacts} fibers={fibers} />
         </div>
 
         {/* Right: drafts list */}
@@ -104,6 +105,14 @@ export default async function EmailsPage() {
                         Sent: {draft.sentAt.toISOString().slice(0, 10)}
                       </span>
                     )}
+                    <form action={deleteDraft.bind(null, draft.id)} className="ml-auto">
+                      <button
+                        type="submit"
+                        className="text-xs text-red-400 hover:text-red-600 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </form>
                   </div>
                 </CardContent>
               </Card>

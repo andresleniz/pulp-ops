@@ -122,3 +122,8 @@ export async function deleteContact(contactId: string): Promise<void> {
   await prisma.marketContact.delete({ where: { id: contactId } })
   revalidatePath("/emails")
 }
+
+export async function deleteDraft(draftId: string): Promise<void> {
+  await prisma.emailDraft.delete({ where: { id: draftId } })
+  revalidatePath("/emails")
+}

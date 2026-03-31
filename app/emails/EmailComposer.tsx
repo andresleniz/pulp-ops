@@ -7,8 +7,9 @@ import { generateDraft, saveContact, deleteContact, type FiberEntry } from "./ac
 
 type Market = { id: string; name: string }
 type Contact = { id: string; marketId: string; name: string; email: string; role: string | null }
+type Fiber = { code: string; name: string }
 
-const FIBERS = ["BKP", "EKP", "UKP"]
+const DEFAULT_ON = new Set(["BKP", "EKP", "UKP Paper", "UKP FC"])
 
 function currentMonth() {
   const now = new Date()
@@ -18,9 +19,11 @@ function currentMonth() {
 export default function EmailComposer({
   markets,
   allContacts,
+  fibers,
 }: {
   markets: Market[]
   allContacts: Contact[]
+  fibers: Fiber[]
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -29,7 +32,7 @@ export default function EmailComposer({
   const [month, setMonth] = useState(currentMonth())
   const [greetingName, setGreetingName] = useState("")
   const [fiberRows, setFiberRows] = useState(
-    FIBERS.map((code) => ({ code, enabled: code !== "UKP", price: "", change: "" }))
+    fibers.map((f) => ({ code: f.code, enabled: DEFAULT_ON.has(f.code), price: "", change: "" }))
   )
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set())
   const [freeEmail, setFreeEmail] = useState("")
@@ -111,7 +114,7 @@ export default function EmailComposer({
       })
       if (result.ok) {
         setStatus("ok")
-        setFiberRows(FIBERS.map((code) => ({ code, enabled: code !== "UKP", price: "", change: "" })))
+        setFiberRows(fibers.map((f) => ({ code: f.code, enabled: DEFAULT_ON.has(f.code), price: "", change: "" })))
         setFreeEmail("")
         setCc("")
         router.refresh()
