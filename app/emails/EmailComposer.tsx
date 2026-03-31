@@ -193,7 +193,12 @@ export default function EmailComposer({
 
           {/* Fiber prices */}
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Prices & Changes</label>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="w-4" />
+              <span className="text-xs text-gray-400 w-8" />
+              <span className="text-xs text-gray-400 w-20 text-center">Price</span>
+              <span className="text-xs text-gray-400 flex-1 text-center">Change vs prev</span>
+            </div>
             <div className="space-y-1.5">
               {fiberRows.map((row) => (
                 <div key={row.code} className="flex items-center gap-2">
@@ -208,7 +213,7 @@ export default function EmailComposer({
                     type="number"
                     value={row.price}
                     onChange={(e) => setFiberField(row.code, "price", e.target.value)}
-                    placeholder="Price"
+                    placeholder="e.g. 650"
                     disabled={!row.enabled}
                     className="w-20 border border-gray-200 rounded px-2 py-1 text-xs disabled:opacity-40"
                   />
@@ -223,6 +228,18 @@ export default function EmailComposer({
                 </div>
               ))}
             </div>
+            {/* Live preview of email lines */}
+            {fiberRows.some((r) => r.enabled && r.price) && (
+              <div className="mt-2 bg-gray-50 rounded p-2 font-mono text-xs text-gray-600 space-y-0.5">
+                {fiberRows
+                  .filter((r) => r.enabled && r.price)
+                  .map((r) => (
+                    <div key={r.code}>
+                      {r.code}: {r.price} USD/ADT ({r.change || "unchanged"})
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
 
           {/* Recipients */}
