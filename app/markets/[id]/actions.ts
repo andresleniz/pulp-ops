@@ -51,11 +51,12 @@ export async function applyPriceOverride(formData: FormData) {
   const { applyOverride } = await import("@/lib/pricing-engine")
   const cycleId = formData.get("cycleId") as string
   const fiberId = formData.get("fiberId") as string
-  const millId = formData.get("millId") as string | null
+  const millId = (formData.get("millId") as string | null) || null
+  const customerId = (formData.get("customerId") as string | null) || null
   const price = parseFloat(formData.get("price") as string)
   const reason = formData.get("reason") as string
 
-  await applyOverride({ cycleId, fiberId, millId, price, reason, changedBy: "Andrés" })
+  await applyOverride({ cycleId, fiberId, millId, customerId, price, reason, changedBy: "Andrés" })
 
   const cycle = await prisma.monthlyCycle.findUnique({
     where: { id: cycleId },
