@@ -1,6 +1,10 @@
 import type { NextConfig } from "next"
+import path from "path"
+import os from "os"
 
+// Move .next cache to local disk — avoids OneDrive write errors
 const nextConfig: NextConfig = {
+  distDir: path.join(os.homedir(), ".next-pulp-ops"),
   experimental: {
     serverActions: {
       allowedOrigins: [

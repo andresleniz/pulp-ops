@@ -1,4 +1,4 @@
-﻿import { prisma } from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 import { generateAllDrafts, markSent, updateBody } from "./actions"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 
@@ -116,3 +116,4 @@ export default async function EmailsPage() {
     </div>
   )
 }
+

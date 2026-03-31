@@ -1,12 +1,63 @@
 import { prisma } from "@/lib/prisma"
 import { saveIndexValue, triggerRecalculate } from "./actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import IndexUploader from "./IndexUploader"
+import dynamic from "next/dynamic"
+import type { ChartGroup } from "./IndexCharts"
+
+const IndexCharts = dynamic(() => import("./IndexCharts"), { ssr: false })
 
 export default async function IndexesPage() {
   const definitions = await prisma.indexDefinition.findMany({
-    include: { values: { orderBy: { month: "desc" }, take: 12 } },
+    include: {
+      values: {
+        where: { OR: [{ source: null }, { source: { not: "forecast" } }] },
+        orderBy: { month: "desc" },
+        take: 12,
+      },
+    },
     orderBy: { name: "asc" },
   })
+
+  const PRIORITY: Record<string, number> = {
+    "PIX China": 0,
+    "TTO North America BHK": 1,
+    "TTO China BHK": 2,
+    "TTO China NBSK": 3,
+    "TTO North America NBSK": 4,
+    "TTO Global UKP UKP": 5,
+  }
+  definitions.sort((a, b) => {
+    const pa = PRIORITY[a.name] ?? 99
+    const pb = PRIORITY[b.name] ?? 99
+    if (pa !== pb) return pa - pb
+    return a.name.localeCompare(b.name)
+  })
+
+  // Build chart groups from the same definitions data (same months as tables)
+  // Values are currently desc-sorted; reverse to asc for charts
+  function shortName(name: string, prefix: string) {
+    return name.replace(prefix, "").trim() || name
+  }
+  const GROUPS: { title: string; prefix: string }[] = [
+    { title: "PIX China", prefix: "PIX China" },
+    { title: "TTO North America", prefix: "TTO North America " },
+    { title: "TTO China", prefix: "TTO China " },
+    { title: "TTO Europe", prefix: "TTO Europe " },
+    { title: "TTO Global UKP", prefix: "TTO Global UKP " },
+  ]
+  const chartGroups: ChartGroup[] = GROUPS.map(({ title, prefix }) => {
+    const matching = definitions.filter((d) =>
+      title === "PIX China" ? d.name === "PIX China" : d.name.startsWith(prefix)
+    )
+    return {
+      title,
+      series: matching.map((d) => ({
+        name: title === "PIX China" ? "PIX China" : shortName(d.name, prefix) || d.name,
+        data: [...d.values].reverse().map((v) => ({ month: v.month, value: Number(v.value) })),
+      })),
+    }
+  }).filter((g) => g.series.some((s) => s.data.length > 0))
 
   const dependentMarkets = await prisma.pricingRule.findMany({
     where: { method: "index_formula", isActive: true },
@@ -22,6 +73,8 @@ export default async function IndexesPage() {
           PIX China and TTO — used for formula-based pricing
         </p>
       </div>
+
+      <IndexCharts groups={chartGroups} />
 
       <div className="grid grid-cols-3 gap-6">
         <div className="col-span-2 space-y-4">
@@ -47,7 +100,7 @@ export default async function IndexesPage() {
                     {def.values.map((v, i) => {
                       const prev = def.values[i + 1]
                       const change = prev
-                        ? Number(v.value) - Number(prev.value)
+                        ? Math.round((Number(v.value) - Number(prev.value)) * 10) / 10
                         : null
                       return (
                         <tr key={v.id} className="border-b border-gray-50 hover:bg-gray-50">
@@ -62,8 +115,8 @@ export default async function IndexesPage() {
                             {change === null
                               ? "—"
                               : change > 0
-                              ? `+${change}`
-                              : String(change)}
+                              ? `+${change.toFixed(1)}`
+                              : change.toFixed(1)}
                           </td>
                         </tr>
                       )
@@ -165,6 +218,8 @@ export default async function IndexesPage() {
               </form>
             </CardContent>
           </Card>
+
+          <IndexUploader />
 
           <Card>
             <CardHeader className="pb-2">
