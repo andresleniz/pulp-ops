@@ -23,6 +23,8 @@ model Market {
   agentId              String?
   isActive             Boolean            @default(true)
   notes                String?
+  defaultGreeting      String?
+  defaultCc            String?
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
   customers            Customer[]

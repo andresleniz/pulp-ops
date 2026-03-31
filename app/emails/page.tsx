@@ -14,7 +14,7 @@ const statusStyle: Record<string, string> = {
 
 export default async function EmailsPage() {
   const [markets, allContacts, fibers, drafts] = await Promise.all([
-    prisma.market.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.market.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, defaultGreeting: true, defaultCc: true } }),
     prisma.marketContact.findMany({ orderBy: { name: "asc" } }),
     prisma.fiber.findMany({ orderBy: { code: "asc" }, select: { code: true, name: true } }),
     prisma.emailDraft.findMany({

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { generateDraft, saveContact, deleteContact, type FiberEntry } from "./actions"
 
-type Market = { id: string; name: string }
+type Market = { id: string; name: string; defaultGreeting: string | null; defaultCc: string | null }
 type Contact = { id: string; marketId: string; name: string; email: string; role: string | null }
 type Fiber = { code: string; name: string }
 
@@ -52,8 +52,15 @@ export default function EmailComposer({
   useEffect(() => {
     const emails = new Set(marketContacts.map((c) => c.email))
     setSelectedEmails(emails)
-    const first = marketContacts[0]
-    setGreetingName(first ? first.name.split(" ")[0] : "")
+    const market = markets.find((m) => m.id === marketId)
+    // Use saved greeting if available, else fall back to first contact's first name
+    if (market?.defaultGreeting) {
+      setGreetingName(market.defaultGreeting)
+    } else {
+      const first = marketContacts[0]
+      setGreetingName(first ? first.name.split(" ")[0] : "")
+    }
+    setCc(market?.defaultCc ?? "")
   }, [marketId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggleFiber(code: string) {

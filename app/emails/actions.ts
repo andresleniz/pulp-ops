@@ -97,6 +97,15 @@ export async function generateDraft(args: {
       },
     })
 
+    // Persist greeting and CC as market defaults for next time
+    await prisma.market.update({
+      where: { id: args.marketId },
+      data: {
+        defaultGreeting: args.greetingName,
+        defaultCc: args.recipientsCc.join(", ") || null,
+      },
+    })
+
     revalidatePath("/emails")
     return { ok: true, draftId: draft.id }
   } catch (e) {
