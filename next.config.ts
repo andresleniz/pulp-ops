@@ -1,10 +1,6 @@
 import type { NextConfig } from "next"
-import path from "path"
-import os from "os"
 
-// Move .next cache to local disk — avoids OneDrive write errors (only in local dev)
 const nextConfig: NextConfig = {
-  ...(process.env.VERCEL ? {} : { distDir: path.join(os.homedir(), ".next-pulp-ops") }),
   experimental: {
     serverActions: {
       allowedOrigins: [
