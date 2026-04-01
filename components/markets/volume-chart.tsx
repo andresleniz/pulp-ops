@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
@@ -17,7 +18,13 @@ interface Props {
 }
 
 export function VolumeChart({ fiberCode, data, customers }: Props) {
+  const [active, setActive] = useState<string | null>(null)
+
   if (data.length === 0) return null
+
+  function toggle(name: string) {
+    setActive((prev) => (prev === name ? null : name))
+  }
 
   return (
     <div>
@@ -27,11 +34,7 @@ export function VolumeChart({ fiberCode, data, customers }: Props) {
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis
-            dataKey="month"
-            tick={{ fontSize: 11, fill: "#9ca3af" }}
-            tickLine={false}
-          />
+          <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#9ca3af" }} tickLine={false} />
           <YAxis
             tick={{ fontSize: 11, fill: "#9ca3af" }}
             tickLine={false}
@@ -42,19 +45,27 @@ export function VolumeChart({ fiberCode, data, customers }: Props) {
             formatter={(value, name) => [`${Number(value).toLocaleString()} ADT`, name]}
             contentStyle={{ fontSize: 12, borderRadius: 6, border: "1px solid #e5e7eb" }}
           />
-          <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-          {customers.map((name, i) => (
-            <Line
-              key={name}
-              type="monotone"
-              dataKey={name}
-              stroke={COLORS[i % COLORS.length]}
-              strokeWidth={2}
-              dot={{ r: 4, strokeWidth: 2 }}
-              activeDot={{ r: 6 }}
-              connectNulls
-            />
-          ))}
+          <Legend
+            wrapperStyle={{ fontSize: 12, paddingTop: 8, cursor: "pointer" }}
+            onClick={(e) => toggle(e.dataKey as string)}
+          />
+          {customers.map((name, i) => {
+            const dimmed = active !== null && active !== name
+            return (
+              <Line
+                key={name}
+                type="monotone"
+                dataKey={name}
+                stroke={COLORS[i % COLORS.length]}
+                strokeWidth={active === name ? 3 : 2}
+                strokeOpacity={dimmed ? 0.15 : 1}
+                dot={{ r: 4, strokeWidth: 2, fillOpacity: dimmed ? 0.15 : 1, strokeOpacity: dimmed ? 0.15 : 1 }}
+                activeDot={{ r: 6, onClick: () => toggle(name) }}
+                connectNulls
+                style={{ cursor: "pointer" }}
+              />
+            )
+          })}
         </LineChart>
       </ResponsiveContainer>
     </div>
