@@ -272,6 +272,7 @@ export default async function MarketDetailPage({
               {cycle ? (
                 <PriceTable
                   cycleId={cycle.id}
+                  marketId={market.id}
                   customers={market.customers.map((c) => ({ id: c.id, name: c.name }))}
                   fibers={fibers}
                   prices={cycle.monthlyPrices.map((p) => ({

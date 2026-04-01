@@ -2,7 +2,7 @@
 
 import React, { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { applyPriceOverride, addPriceRow, setStandardPrices } from "@/app/markets/[id]/actions"
+import { applyPriceOverride, addPriceRow, setStandardPrices, deletePriceRow } from "@/app/markets/[id]/actions"
 import { getPriceSource } from "@/lib/price-source"
 
 interface PriceRow {
@@ -34,11 +34,12 @@ interface Fiber {
 interface Props {
   prices: PriceRow[]
   cycleId: string
+  marketId: string
   customers: Customer[]
   fibers: Fiber[]
 }
 
-export function PriceTable({ prices, cycleId, customers, fibers }: Props) {
+export function PriceTable({ prices, cycleId, marketId, customers, fibers }: Props) {
   const router = useRouter()
   const [overrideRow, setOverrideRow] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
@@ -123,12 +124,27 @@ export function PriceTable({ prices, cycleId, customers, fibers }: Props) {
             )}
           </td>
           <td className="py-2 text-right">
-            <button
-              onClick={() => setOverrideRow(overrideRow === row.id ? null : row.id)}
-              className="text-xs text-blue-600 hover:underline"
-            >
-              Set Price
-            </button>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setOverrideRow(overrideRow === row.id ? null : row.id)}
+                className="text-xs text-blue-600 hover:underline"
+              >
+                Set Price
+              </button>
+              <button
+                onClick={() => {
+                  startTransition(async () => {
+                    await deletePriceRow(row.id, marketId)
+                    router.refresh()
+                  })
+                }}
+                disabled={pending}
+                className="text-xs text-red-400 hover:text-red-600 disabled:opacity-40"
+                title="Delete price"
+              >
+                ×
+              </button>
+            </div>
           </td>
         </tr>
         {overrideRow === row.id && (

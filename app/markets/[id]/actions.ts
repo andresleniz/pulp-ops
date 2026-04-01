@@ -182,6 +182,11 @@ export async function setStandardPrices(cycleId: string, entries: { fiberId: str
   revalidatePath(`/markets/${cycle.market.id}`)
 }
 
+export async function deletePriceRow(priceId: string, marketId: string) {
+  await prisma.monthlyPrice.delete({ where: { id: priceId } })
+  revalidatePath(`/markets/${marketId}`)
+}
+
 export async function addPriceRow(formData: FormData) {
   const cycleId = formData.get("cycleId") as string
   const customerId = formData.get("customerId") as string
