@@ -56,17 +56,22 @@ export function PriceChart({ fiberCode, data, customers }: Props) {
           <Legend
             wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
           />
-          {customers.map((name, i) => (
-            <Line
-              key={name}
-              type="monotone"
-              dataKey={name}
-              stroke={COLORS[i % COLORS.length]}
-              strokeWidth={2}
-              dot={{ r: 3 }}
-              connectNulls={false}
-            />
-          ))}
+          {customers.map((name, i) => {
+            const isStandard = name === "Standard"
+            return (
+              <Line
+                key={name}
+                type="monotone"
+                dataKey={name}
+                stroke={isStandard ? "#94a3b8" : COLORS[i % COLORS.length]}
+                strokeWidth={isStandard ? 1.5 : 2}
+                strokeDasharray={isStandard ? "5 3" : undefined}
+                dot={{ r: isStandard ? 3 : 4, strokeWidth: 2 }}
+                activeDot={{ r: 6 }}
+                connectNulls
+              />
+            )
+          })}
         </LineChart>
       </ResponsiveContainer>
     </div>

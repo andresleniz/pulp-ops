@@ -371,6 +371,7 @@ export async function applyOverride(params: {
       price: new Decimal(price),
       isOverride: true,
       overrideReason: reason,
+      formulaSnapshot: "MANUAL_OVERRIDE",
       updatedAt: new Date(),
     },
   })
@@ -386,6 +387,7 @@ export async function applyOverride(params: {
       isOverride: true,
       overrideReason: reason,
       pricingMethod: "manual",
+      formulaSnapshot: "MANUAL_OVERRIDE",
     },
   })
 }

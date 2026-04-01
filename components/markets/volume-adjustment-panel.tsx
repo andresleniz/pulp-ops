@@ -7,21 +7,26 @@ type Adjustment = {
   id: string
   customerId: string | null
   customerName: string | null
+  fiberId: string | null
+  fiberCode: string | null
   volumeAdt: number
   reason: string | null
 }
 
 type Customer = { id: string; name: string }
+type Fiber = { id: string; code: string }
 
 export function VolumeAdjustmentPanel({
   marketId,
   month,
   customers,
+  fibers,
   adjustments,
 }: {
   marketId: string
   month: string
   customers: Customer[]
+  fibers: Fiber[]
   adjustments: Adjustment[]
 }) {
   const [isPending, startTransition] = useTransition()
@@ -55,6 +60,11 @@ export function VolumeAdjustmentPanel({
                 <span className="font-medium text-gray-700">
                   {a.customerName ?? "Market-wide"}
                 </span>
+                {a.fiberCode && (
+                  <span className="ml-1.5 text-xs font-mono bg-gray-100 text-gray-600 px-1 py-0.5 rounded">
+                    {a.fiberCode}
+                  </span>
+                )}
                 <span
                   className={`ml-2 font-semibold ${a.volumeAdt < 0 ? "text-red-600" : "text-green-600"}`}
                 >
@@ -88,6 +98,21 @@ export function VolumeAdjustmentPanel({
       <form ref={formRef} action={handleAdd} className="space-y-2 pt-1 border-t border-gray-100">
         <input type="hidden" name="marketId" value={marketId} />
         <input type="hidden" name="month" value={month} />
+
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Grade</label>
+          <select
+            name="fiberId"
+            className="w-full border border-gray-200 rounded px-2 py-1 text-xs bg-white"
+          >
+            <option value="">All grades</option>
+            {fibers.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.code}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div>
           <label className="block text-xs text-gray-400 mb-1">Customer (optional)</label>

@@ -107,16 +107,17 @@ model Mill {
 }
 
 model Fiber {
-  id            String              @id @default(cuid())
-  code          String              @unique
-  name          String
-  unit          String              @default("USD/ADT")
-  createdAt     DateTime            @default(now())
-  exceptions    CustomerException[]
-  monthlyPrices MonthlyPrice[]
-  negotiations  NegotiationEvent[]
-  orders        OrderRecord[]
-  pricingRules  PricingRule[]
+  id                String              @id @default(cuid())
+  code              String              @unique
+  name              String
+  unit              String              @default("USD/ADT")
+  createdAt         DateTime            @default(now())
+  exceptions        CustomerException[]
+  monthlyPrices     MonthlyPrice[]
+  negotiations      NegotiationEvent[]
+  orders            OrderRecord[]
+  pricingRules      PricingRule[]
+  volumeAdjustments VolumeAdjustment[]
 }
 
 model IndexDefinition {
@@ -478,12 +479,14 @@ model VolumeAdjustment {
   marketId     String
   month        String
   customerId   String?
+  fiberId      String?
   volumeAdt    Decimal   // negative = reduction offered to market/customer
   reason       String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   market       Market    @relation(fields: [marketId], references: [id])
   customer     Customer? @relation(fields: [customerId], references: [id])
+  fiber        Fiber?    @relation(fields: [fiberId], references: [id])
 
   @@index([marketId, month])
 }

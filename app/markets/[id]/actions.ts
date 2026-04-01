@@ -143,18 +143,41 @@ export async function updateCustomerRule(formData: FormData) {
 }
 
 export async function setStandardPrices(cycleId: string, entries: { fiberId: string; price: number }[]) {
-  const { applyOverride } = await import("@/lib/pricing-engine")
   const cycle = await prisma.monthlyCycle.findUnique({
     where: { id: cycleId },
-    select: { market: { select: { id: true } } },
+    select: { marketId: true, market: { select: { id: true } } },
   })
   if (!cycle) throw new Error("Cycle not found")
 
-  await Promise.all(
-    entries.map(({ fiberId, price }) =>
-      applyOverride({ cycleId, fiberId, millId: null, customerId: null, price, reason: "Standard price", changedBy: "Andrés" })
-    )
-  )
+  const customers = await prisma.customer.findMany({
+    where: { marketId: cycle.marketId },
+    select: { id: true },
+  })
+
+  // Fan out: for each fiber entry, create a price record for every customer without one
+  for (const { fiberId, price } of entries) {
+    for (const { id: customerId } of customers) {
+      const existing = await prisma.monthlyPrice.findFirst({
+        where: { cycleId, fiberId, customerId, millId: null },
+      })
+      if (!existing) {
+        await prisma.monthlyPrice.create({
+          data: {
+            cycleId,
+            marketId: cycle.marketId,
+            fiberId,
+            customerId,
+            millId: null,
+            price: new Decimal(price),
+            isOverride: true,
+            overrideReason: "Standard price",
+            pricingMethod: "manual",
+            formulaSnapshot: "MANUAL_OVERRIDE",
+          },
+        })
+      }
+    }
+  }
 
   revalidatePath(`/markets/${cycle.market.id}`)
 }

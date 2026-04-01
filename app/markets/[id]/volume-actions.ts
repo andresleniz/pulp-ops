@@ -8,6 +8,7 @@ export async function addVolumeAdjustment(formData: FormData) {
   const marketId = formData.get("marketId") as string
   const month = formData.get("month") as string
   const customerId = (formData.get("customerId") as string) || null
+  const fiberId = (formData.get("fiberId") as string) || null
   const volumeAdt = parseFloat(formData.get("volumeAdt") as string)
   const reason = (formData.get("reason") as string) || null
 
@@ -16,6 +17,7 @@ export async function addVolumeAdjustment(formData: FormData) {
       marketId,
       month,
       customerId: customerId || null,
+      fiberId: fiberId || null,
       volumeAdt: new Decimal(volumeAdt),
       reason,
     },
