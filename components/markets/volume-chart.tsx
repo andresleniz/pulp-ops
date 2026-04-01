@@ -1,7 +1,7 @@
 "use client"
 
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from "recharts"
 
@@ -25,7 +25,7 @@ export function VolumeChart({ fiberCode, data, customers }: Props) {
         {fiberCode} — ADT
       </p>
       <ResponsiveContainer width="100%" height={220}>
-        <BarChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+        <LineChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis
             dataKey="month"
@@ -44,15 +44,18 @@ export function VolumeChart({ fiberCode, data, customers }: Props) {
           />
           <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
           {customers.map((name, i) => (
-            <Bar
+            <Line
               key={name}
+              type="monotone"
               dataKey={name}
-              stackId="a"
-              fill={COLORS[i % COLORS.length]}
-              maxBarSize={40}
+              stroke={COLORS[i % COLORS.length]}
+              strokeWidth={2}
+              dot={{ r: 4, strokeWidth: 2 }}
+              activeDot={{ r: 6 }}
+              connectNulls
             />
           ))}
-        </BarChart>
+        </LineChart>
       </ResponsiveContainer>
     </div>
   )
