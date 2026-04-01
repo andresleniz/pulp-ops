@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { logAudit } from "@/lib/audit"
+import { isManualPrice } from "@/lib/price-source"
 import Decimal from "decimal.js"
 
 const COUNTRY_TO_MARKET: Record<string, string> = {
@@ -168,22 +169,29 @@ export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
           where: { cycleId: cycle.id, fiberId: fiber.id, millId: null, customerId: customer.id },
         })
 
-        if (existingPrice) {
-          await prisma.monthlyPrice.update({
-            where: { id: existingPrice.id },
-            data: { price: new Decimal(price), pricingMethod: "manual", formulaSnapshot: "CRM Import", updatedAt: new Date() },
-          })
-        } else {
-          await prisma.monthlyPrice.create({
-            data: {
-              cycleId: cycle.id, marketId: market.id,
-              fiberId: fiber.id, customerId: customer.id,
-              price: new Decimal(price),
-              pricingMethod: "manual",
-              formulaSnapshot: "CRM Import",
-              isOverride: false,
-            },
-          })
+        // Japan rule: manual prices always supersede CRM — never overwrite them
+        const isJapan = market.name === "Japan"
+        const skipUpdate = isJapan && existingPrice &&
+          isManualPrice(existingPrice.formulaSnapshot, existingPrice.isOverride)
+
+        if (!skipUpdate) {
+          if (existingPrice) {
+            await prisma.monthlyPrice.update({
+              where: { id: existingPrice.id },
+              data: { price: new Decimal(price), pricingMethod: "manual", formulaSnapshot: "CRM Import", updatedAt: new Date() },
+            })
+          } else {
+            await prisma.monthlyPrice.create({
+              data: {
+                cycleId: cycle.id, marketId: market.id,
+                fiberId: fiber.id, customerId: customer.id,
+                price: new Decimal(price),
+                pricingMethod: "manual",
+                formulaSnapshot: "CRM Import",
+                isOverride: false,
+              },
+            })
+          }
         }
       }
 

@@ -3,6 +3,7 @@
 import React, { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { applyPriceOverride, addPriceRow, setStandardPrices } from "@/app/markets/[id]/actions"
+import { getPriceSource } from "@/lib/price-source"
 
 interface PriceRow {
   id: string
@@ -96,9 +97,21 @@ export function PriceTable({ prices, cycleId, customers, fibers }: Props) {
           <td className="py-2 font-semibold">{row.fiberCode}</td>
           <td className="py-2 text-gray-500 text-xs">{row.millName && row.customerName ? row.millName : "—"}</td>
           <td className="py-2">
-            <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${row.isOverride ? "bg-purple-100 text-purple-700" : "bg-gray-100 text-gray-600"}`}>
-              {row.isOverride ? "override" : (row.method ?? "crm")}
-            </span>
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${row.isOverride ? "bg-purple-100 text-purple-700" : "bg-gray-100 text-gray-600"}`}>
+                {row.isOverride ? "override" : (row.method ?? "manual")}
+              </span>
+              {(() => {
+                const src = getPriceSource(row.formulaSnapshot, row.isOverride)
+                if (src === "crm") return (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">CRM</span>
+                )
+                if (src === "manual") return (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">manual</span>
+                )
+                return null
+              })()}
+            </div>
           </td>
           <td className="py-2 text-right font-semibold">
             {row.price !== null

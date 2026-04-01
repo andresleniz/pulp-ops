@@ -87,14 +87,16 @@ export default async function MarketDetailPage({
     orderBy: { createdAt: "asc" },
   })
 
+  const chartMonths = ALL_MONTHS.slice(-12)
+
   const historicalPrices = await prisma.monthlyPrice.findMany({
     where: {
       marketId: market.id,
       price: { not: null },
+      cycle: { month: { in: chartMonths } },
     },
     include: { fiber: true, mill: true, customer: true, cycle: true },
     orderBy: { cycle: { month: "asc" } },
-    take: 200,
   })
 
   const fiberCodes = [...new Set(historicalPrices.map((p) => p.fiber.code))]
@@ -109,7 +111,7 @@ export default async function MarketDetailPage({
     const customerNames = [...new Set(fiberPrices.map((p) => p.customer?.name ?? p.mill?.name ?? "Base"))]
 
     const monthMap: Record<string, Record<string, number | null>> = {}
-    for (const month of ALL_MONTHS) {
+    for (const month of chartMonths) {
       monthMap[month] = {}
       for (const name of customerNames) {
         monthMap[month][name] = null
@@ -125,7 +127,7 @@ export default async function MarketDetailPage({
     }
 
     chartDataByFiber[fiberCode] = {
-      data: ALL_MONTHS.map((m) => {
+      data: chartMonths.map((m) => {
         const point: Record<string, string | number | null> = { month: m.slice(2) }
         for (const name of customerNames) {
           point[name] = monthMap[m]?.[name] ?? null
