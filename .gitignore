@@ -26,3 +26,17 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+.vercel
+
+# IDE
+.vs/
+*.tsbuildinfo
+
+# Machine-specific
+package-*.json
+start.bat
+setup-sqlite.ps1
+
+# Claude
+.claude/

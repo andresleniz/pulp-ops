@@ -37,6 +37,7 @@ model Market {
   pricingRules         PricingRule[]
   subgroups            Subgroup[]
   contacts             MarketContact[]
+  volumeAdjustments    VolumeAdjustment[]
 }
 
 model Agent {
@@ -76,7 +77,8 @@ model Customer {
   mills           Mill[]
   monthlyPrices   MonthlyPrice[]
   negotiations    NegotiationEvent[]
-  orders          OrderRecord[]
+  orders              OrderRecord[]
+  volumeAdjustments   VolumeAdjustment[]
 }
 
 model Subgroup {
@@ -469,4 +471,19 @@ enum TaskType {
   pending_confirmation
   hold_review
   negotiation_followup
+}
+
+model VolumeAdjustment {
+  id           String    @id @default(cuid())
+  marketId     String
+  month        String
+  customerId   String?
+  volumeAdt    Decimal   // negative = reduction offered to market/customer
+  reason       String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  market       Market    @relation(fields: [marketId], references: [id])
+  customer     Customer? @relation(fields: [customerId], references: [id])
+
+  @@index([marketId, month])
 }

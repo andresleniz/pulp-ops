@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic"
+
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { CycleStatusForm } from "@/components/markets/cycle-status-form"
@@ -10,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { MonthSelector } from "@/components/markets/month-selector"
 import { USACharts } from "@/components/markets/usa-charts"
+import { VolumeAdjustmentPanel } from "@/components/markets/volume-adjustment-panel"
 
 export default async function MarketDetailPage({
   params,
@@ -76,6 +79,12 @@ export default async function MarketDetailPage({
     where: { marketId: market.id },
     orderBy: { month: "desc" },
     take: 12,
+  })
+
+  const volumeAdjustments = await prisma.volumeAdjustment.findMany({
+    where: { marketId: market.id, month: selectedMonth },
+    include: { customer: { select: { name: true } } },
+    orderBy: { createdAt: "asc" },
   })
 
   const historicalPrices = await prisma.monthlyPrice.findMany({
@@ -353,6 +362,26 @@ export default async function MarketDetailPage({
                   pricingNote: null,
                 }))}
                 fibers={fibers.map((f) => ({ id: f.id, code: f.code }))}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Volume Adjustments</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <VolumeAdjustmentPanel
+                marketId={market.id}
+                month={selectedMonth}
+                customers={market.customers.map((c) => ({ id: c.id, name: c.name }))}
+                adjustments={volumeAdjustments.map((a) => ({
+                  id: a.id,
+                  customerId: a.customerId,
+                  customerName: a.customer?.name ?? null,
+                  volumeAdt: Number(a.volumeAdt),
+                  reason: a.reason,
+                }))}
               />
             </CardContent>
           </Card>

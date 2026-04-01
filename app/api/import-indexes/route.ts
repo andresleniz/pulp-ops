@@ -194,6 +194,7 @@ function parseTTO(rawRows: unknown[][]): TTOParseResult | null {
       const name = colNames[c]
       if (!name || name === "__month__" || name === "__skip__") continue
       if (name.includes("Adj") || name.includes("Freight Rate")) continue
+      if (name.includes("BCTMP") || name.includes("Dissolving") || name.includes("Fluff")) continue
       const v = row[c]
       if (!isNumeric(v)) continue
       if (!data.has(name)) { data.set(name, new Map()); colIndexByName.set(name, c) }
