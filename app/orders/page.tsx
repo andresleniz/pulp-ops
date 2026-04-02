@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { Card, CardContent } from "@/components/ui/card"
+import { CRM_FILTER } from "@/lib/order-queries"
 
 const statusStyle: Record<string, string> = {
   none: "bg-gray-100 text-gray-500",
@@ -12,7 +13,7 @@ const statusStyle: Record<string, string> = {
 
 export default async function OrdersPage() {
   const orders = await prisma.orderRecord.findMany({
-    where: { source: "CRM" },
+    where: { ...CRM_FILTER },
     include: {
       customer: true,
       fiber: true,

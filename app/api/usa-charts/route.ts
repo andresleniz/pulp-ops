@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { CRM_FILTER } from "@/lib/order-queries"
 
 function getLastMonths(n: number): string[] {
   const months: string[] = []
@@ -77,6 +78,7 @@ export async function GET() {
 
     const orders = await prisma.orderRecord.findMany({
       where: {
+        ...CRM_FILTER,
         cycleId: { in: cycleIds },
         month: { in: ALL_MONTHS },
       },

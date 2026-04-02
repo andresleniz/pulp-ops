@@ -14,6 +14,7 @@ import { MonthSelector } from "@/components/markets/month-selector"
 import { USACharts } from "@/components/markets/usa-charts"
 import { VolumeAdjustmentPanel } from "@/components/markets/volume-adjustment-panel"
 import { VolumeChart } from "@/components/markets/volume-chart"
+import { CRM_FILTER } from "@/lib/order-queries"
 
 export default async function MarketDetailPage({
   params,
@@ -181,7 +182,7 @@ export default async function MarketDetailPage({
 
   // ── Volume chart data ────────────────────────────────────────────────────
   const orderRecords = await prisma.orderRecord.findMany({
-    where: { cycle: { marketId: market.id, month: { in: chartMonths } }, source: "CRM" },
+    where: { ...CRM_FILTER, cycle: { marketId: market.id, month: { in: chartMonths } } },
     include: { fiber: true, customer: true, cycle: true },
   })
 
