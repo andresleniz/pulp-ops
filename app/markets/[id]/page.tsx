@@ -181,7 +181,7 @@ export default async function MarketDetailPage({
 
   // ── Volume chart data ────────────────────────────────────────────────────
   const orderRecords = await prisma.orderRecord.findMany({
-    where: { cycle: { marketId: market.id, month: { in: chartMonths } } },
+    where: { cycle: { marketId: market.id, month: { in: chartMonths } }, source: "CRM" },
     include: { fiber: true, customer: true, cycle: true },
   })
 

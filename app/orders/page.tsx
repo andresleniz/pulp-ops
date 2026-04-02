@@ -12,6 +12,7 @@ const statusStyle: Record<string, string> = {
 
 export default async function OrdersPage() {
   const orders = await prisma.orderRecord.findMany({
+    where: { source: "CRM" },
     include: {
       customer: true,
       fiber: true,
