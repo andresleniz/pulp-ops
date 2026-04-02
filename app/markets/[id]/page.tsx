@@ -15,6 +15,7 @@ import { USACharts } from "@/components/markets/usa-charts"
 import { VolumeAdjustmentPanel } from "@/components/markets/volume-adjustment-panel"
 import { VolumeChart } from "@/components/markets/volume-chart"
 import { CRM_FILTER } from "@/lib/order-queries"
+import { getEffectiveMonthlyPrices } from "@/lib/price-queries"
 
 export default async function MarketDetailPage({
   params,
@@ -94,14 +95,12 @@ export default async function MarketDetailPage({
 
   const chartMonths = ALL_MONTHS.slice(-12)
 
-  const historicalPrices = await prisma.monthlyPrice.findMany({
-    where: {
-      marketId: market.id,
-      price: { not: null },
-      cycle: { month: { in: chartMonths } },
-    },
-    include: { fiber: true, mill: true, customer: true, cycle: true },
-    orderBy: { cycle: { month: "asc" } },
+  // Effective prices: Japan manual prices supersede CRM (see lib/price-queries.ts).
+  // All other markets: CRM-backed prices, with manual as fallback until next CRM import.
+  const historicalPrices = await getEffectiveMonthlyPrices({
+    marketId: market.id,
+    marketName: market.name,
+    months: chartMonths,
   })
 
   const fiberCodes = [...new Set(historicalPrices.map((p) => p.fiber.code))]
