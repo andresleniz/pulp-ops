@@ -340,6 +340,7 @@ model OrderRecord {
   volume         Decimal
   price          Decimal
   status         OrderStatus  @default(agreed)
+  source         String       @default("CRM")  // "CRM" | "Manual"
   reference      String?
   notes          String?
   freightPerAdmt Decimal?
@@ -351,6 +352,7 @@ model OrderRecord {
   mill           Mill?        @relation(fields: [millId], references: [id])
 
   @@index([cycleId])
+  @@index([cycleId, customerId, fiberId, source])
 }
 
 model AuditLog {

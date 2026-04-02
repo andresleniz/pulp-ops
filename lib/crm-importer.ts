@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { logAudit } from "@/lib/audit"
 import { isManualPrice } from "@/lib/price-source"
+import { validateOrderWrite, evictManualOrders } from "@/lib/order-validation"
 import Decimal from "decimal.js"
 
 const COUNTRY_TO_MARKET: Record<string, string> = {
@@ -63,7 +64,9 @@ export interface ImportResult {
   skipped: number
   created: number
   updated: number
+  evicted: number
   errors: string[]
+  rejections: string[]
 }
 
 export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
@@ -73,7 +76,9 @@ export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
     skipped: 0,
     created: 0,
     updated: 0,
+    evicted: 0,
     errors: [],
+    rejections: [],
   }
 
   const markets = await prisma.market.findMany()
@@ -120,6 +125,22 @@ export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
       const price = row.price && row.price > 0 ? row.price : null
       if (!volume || !price) { result.skipped++; continue }
 
+      // Validate before any DB write
+      const validation = validateOrderWrite({
+        cycleId: "pending", // ref/price validation only at this stage
+        customerId: customer.id,
+        fiberId: fiber.id,
+        source: "CRM",
+        reference: row.orderRef,
+        volume,
+        price,
+      })
+      if (!validation.allowed) {
+        result.rejections.push(`${customerName} ${yearMonth} ${fiberCode}: ${validation.reason}`)
+        result.skipped++
+        continue
+      }
+
       let cycle = await prisma.monthlyCycle.findUnique({
         where: { month_marketId: { month: yearMonth, marketId: market.id } },
       })
@@ -134,6 +155,16 @@ export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
         })
       }
 
+      // Evict any manual orders for this customer+grade+cycle before writing CRM data
+      const evictedIds = await evictManualOrders({
+        cycleId: cycle.id,
+        customerId: customer.id,
+        fiberId: fiber.id,
+        marketId: market.id,
+        month: yearMonth,
+      })
+      result.evicted += evictedIds.length
+
       const existingOrder = row.orderRef
         ? await prisma.orderRecord.findFirst({
             where: { reference: row.orderRef, cycleId: cycle.id },
@@ -146,6 +177,7 @@ export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
           data: {
             volume: new Decimal(volume),
             price: new Decimal(price),
+            source: "CRM",
             status: "ordered",
             notes: row.comments ?? null,
           },
@@ -158,6 +190,7 @@ export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
             customerId: customer.id, fiberId: fiber.id,
             volume: new Decimal(volume),
             price: new Decimal(price),
+            source: "CRM",
             status: "ordered",
             reference: row.orderRef ?? null,
             notes: row.comments ?? null,
@@ -204,7 +237,7 @@ export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
   await logAudit({
     entity: "CRMImport", entityId: "bulk", field: "import",
     oldValue: null,
-    newValue: `${result.imported} rows (${result.created} created, ${result.updated} updated)`,
+    newValue: `${result.imported} rows (${result.created} created, ${result.updated} updated, ${result.evicted} manual rows evicted)`,
     changedBy: "Andrés",
   })
 
@@ -260,7 +293,9 @@ export async function importUSARows(rows: USARow[]): Promise<ImportResult> {
     skipped: 0,
     created: 0,
     updated: 0,
+    evicted: 0,
     errors: [],
+    rejections: [],
   }
 
   const usaMarket = await prisma.market.findUnique({ where: { name: "USA" } })
@@ -292,6 +327,22 @@ export async function importUSARows(rows: USARow[]): Promise<ImportResult> {
         customers.push(customer)
       }
 
+      // Validate before any DB write
+      const validation = validateOrderWrite({
+        cycleId: "pending",
+        customerId: customer.id,
+        fiberId: fEKP.id,
+        source: "CRM",
+        reference: null,
+        volume: row.volume ?? 1,
+        price: row.price,
+      })
+      if (!validation.allowed) {
+        result.rejections.push(`${fullName} ${row.month}: ${validation.reason}`)
+        result.skipped++
+        continue
+      }
+
       let cycle = await prisma.monthlyCycle.findUnique({
         where: { month_marketId: { month: row.month, marketId: usaMarket.id } },
       })
@@ -306,12 +357,23 @@ export async function importUSARows(rows: USARow[]): Promise<ImportResult> {
         })
       }
 
+      // Evict any manual orders for this customer+grade+cycle
+      const evictedIds = await evictManualOrders({
+        cycleId: cycle.id,
+        customerId: customer.id,
+        fiberId: fEKP.id,
+        marketId: usaMarket.id,
+        month: row.month,
+      })
+      result.evicted += evictedIds.length
+
       const existingOrder = await prisma.orderRecord.findFirst({
         where: {
           cycleId: cycle.id,
           customerId: customer.id,
           fiberId: fEKP.id,
           price: new Decimal(row.price),
+          source: "CRM",
         },
       })
 
@@ -325,6 +387,7 @@ export async function importUSARows(rows: USARow[]): Promise<ImportResult> {
             freightPerAdmt: row.freightPerAdmt != null
               ? new Decimal(row.freightPerAdmt)
               : null,
+            source: "CRM",
             status: "ordered",
             notes: row.notes ?? null,
           },
@@ -365,7 +428,7 @@ export async function importUSARows(rows: USARow[]): Promise<ImportResult> {
   await logAudit({
     entity: "USAImport", entityId: "bulk", field: "import",
     oldValue: null,
-    newValue: `${result.imported} rows (${result.created} created, ${result.updated} updated)`,
+    newValue: `${result.imported} rows (${result.created} created, ${result.updated} updated, ${result.evicted} manual rows evicted)`,
     changedBy: "Andrés",
   })
 
