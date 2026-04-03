@@ -14,8 +14,8 @@ import { MonthSelector } from "@/components/markets/month-selector"
 import { USACharts } from "@/components/markets/usa-charts"
 import { VolumeAdjustmentPanel } from "@/components/markets/volume-adjustment-panel"
 import { VolumeChart } from "@/components/markets/volume-chart"
-import { CRM_FILTER } from "@/lib/order-queries"
 import { getEffectiveMonthlyPrices } from "@/lib/price-queries"
+import { getVolumeChartData } from "@/lib/volume-queries"
 
 export default async function MarketDetailPage({
   params,
@@ -180,51 +180,7 @@ export default async function MarketDetailPage({
   }
 
   // ── Volume chart data ────────────────────────────────────────────────────
-  const orderRecords = await prisma.orderRecord.findMany({
-    where: { ...CRM_FILTER, cycle: { marketId: market.id, month: { in: chartMonths } } },
-    include: { fiber: true, customer: true, cycle: true },
-  })
-
-  const volumeFiberCodes = [...new Set(orderRecords.map((o) => o.fiber.code))]
-
-  const volumeChartByFiber: Record<string, {
-    data: Record<string, string | number | null>[]
-    customers: string[]
-  }> = {}
-
-  for (const fiberCode of volumeFiberCodes) {
-    const fiberOrders = orderRecords.filter((o) => o.fiber.code === fiberCode)
-    const customerNames = [...new Set(fiberOrders.map((o) => o.customer.name))]
-
-    const monthMap: Record<string, Record<string, number>> = {}
-    for (const m of chartMonths) {
-      monthMap[m] = {}
-      for (const name of customerNames) monthMap[m][name] = 0
-    }
-
-    for (const order of fiberOrders) {
-      const name = order.customer.name
-      const month = order.cycle.month
-      if (monthMap[month]) {
-        monthMap[month][name] = (monthMap[month][name] ?? 0) + Number(order.volume)
-      }
-    }
-
-    volumeChartByFiber[fiberCode] = {
-      data: chartMonths.map((m) => {
-        const point: Record<string, string | number | null> = { month: m.slice(2) }
-        let total = 0
-        for (const name of customerNames) {
-          const vol = monthMap[m]?.[name] || null
-          point[name] = vol
-          total += vol ?? 0
-        }
-        point["Total"] = total > 0 ? total : null
-        return point
-      }),
-      customers: customerNames,
-    }
-  }
+  const volumeChartByFiber = await getVolumeChartData({ marketId: market.id, months: chartMonths })
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
