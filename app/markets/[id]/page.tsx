@@ -213,9 +213,13 @@ export default async function MarketDetailPage({
     volumeChartByFiber[fiberCode] = {
       data: chartMonths.map((m) => {
         const point: Record<string, string | number | null> = { month: m.slice(2) }
+        let total = 0
         for (const name of customerNames) {
-          point[name] = monthMap[m]?.[name] || null
+          const vol = monthMap[m]?.[name] || null
+          point[name] = vol
+          total += vol ?? 0
         }
+        point["Total"] = total > 0 ? total : null
         return point
       }),
       customers: customerNames,

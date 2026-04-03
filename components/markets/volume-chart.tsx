@@ -11,6 +11,9 @@ const COLORS = [
   "#7c3aed", "#0891b2", "#be185d", "#65a30d",
 ]
 
+const TOTAL_KEY = "Total"
+const TOTAL_COLOR = "#1e293b"
+
 interface Props {
   fiberCode: string
   data: Record<string, string | number | null>[]
@@ -50,7 +53,7 @@ export function VolumeChart({ fiberCode, data, customers }: Props) {
             onClick={(e) => toggle(e.dataKey as string)}
           />
           {customers.map((name, i) => {
-            const dimmed = active !== null && active !== name
+            const dimmed = active !== null && active !== name && active !== TOTAL_KEY
             return (
               <Line
                 key={name}
@@ -66,6 +69,19 @@ export function VolumeChart({ fiberCode, data, customers }: Props) {
               />
             )
           })}
+          <Line
+            key={TOTAL_KEY}
+            type="monotone"
+            dataKey={TOTAL_KEY}
+            stroke={TOTAL_COLOR}
+            strokeWidth={active === TOTAL_KEY ? 4 : 2.5}
+            strokeOpacity={active !== null && active !== TOTAL_KEY ? 0.2 : 1}
+            strokeDasharray="6 3"
+            dot={false}
+            activeDot={{ r: 6, onClick: () => toggle(TOTAL_KEY) }}
+            connectNulls
+            style={{ cursor: "pointer" }}
+          />
         </LineChart>
       </ResponsiveContainer>
     </div>
