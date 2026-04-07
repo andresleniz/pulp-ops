@@ -38,6 +38,8 @@ model Market {
   subgroups            Subgroup[]
   contacts             MarketContact[]
   volumeAdjustments    VolumeAdjustment[]
+  marketTasks          MarketTask[]
+  marketNotes          MarketNote[]
 }
 
 model Agent {
@@ -215,6 +217,8 @@ model MonthlyCycle {
   orders               OrderRecord[]
   snapshot             Snapshot?
   tasks                Task[]
+  marketTasks          MarketTask[]
+  marketNotes          MarketNote[]
 
   @@unique([month, marketId])
   @@index([month])
@@ -491,4 +495,39 @@ model VolumeAdjustment {
   fiber        Fiber?    @relation(fields: [fiberId], references: [id])
 
   @@index([marketId, month])
+}
+
+model MarketTask {
+  id        String           @id @default(cuid())
+  marketId  String
+  cycleId   String?
+  month     String?
+  title     String
+  status    MarketTaskStatus @default(pending)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  market    Market           @relation(fields: [marketId], references: [id])
+  cycle     MonthlyCycle?    @relation(fields: [cycleId], references: [id])
+
+  @@index([marketId, month])
+}
+
+model MarketNote {
+  id        String        @id @default(cuid())
+  marketId  String
+  cycleId   String?
+  month     String?
+  content   String        @default("")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  market    Market        @relation(fields: [marketId], references: [id])
+  cycle     MonthlyCycle? @relation(fields: [cycleId], references: [id])
+
+  @@unique([marketId, month])
+  @@index([marketId, month])
+}
+
+enum MarketTaskStatus {
+  pending
+  done
 }

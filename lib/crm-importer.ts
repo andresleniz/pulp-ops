@@ -69,6 +69,33 @@ export interface ImportResult {
   rejections: string[]
 }
 
+/**
+ * Ensures that a MonthlyCycle exists for every active market for the given month.
+ * Cycles for markets that do not yet have one are created with default "open" status.
+ * The Set `initialized` is used as a guard so the fan-out only runs once per month
+ * per import run, regardless of how many CRM rows share that month.
+ */
+async function ensureAllMarketCycles(
+  yearMonth: string,
+  allMarkets: { id: string }[],
+  initialized: Set<string>,
+): Promise<void> {
+  if (initialized.has(yearMonth)) return
+  initialized.add(yearMonth)
+
+  for (const m of allMarkets) {
+    const exists = await prisma.monthlyCycle.findUnique({
+      where: { month_marketId: { month: yearMonth, marketId: m.id } },
+      select: { id: true },
+    })
+    if (!exists) {
+      await prisma.monthlyCycle.create({
+        data: { month: yearMonth, marketId: m.id, owner: "System" },
+      })
+    }
+  }
+}
+
 export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
   const result: ImportResult = {
     total: rows.length,
@@ -84,6 +111,9 @@ export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
   const markets = await prisma.market.findMany()
   const fibers = await prisma.fiber.findMany()
   const customers = await prisma.customer.findMany()
+
+  // Tracks which months have already had cycles created for all markets this run
+  const globallyInitializedMonths = new Set<string>()
 
   for (const row of rows) {
     try {
@@ -140,6 +170,10 @@ export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
         result.skipped++
         continue
       }
+
+      // Ensure every market has a cycle for this month before writing CRM data.
+      // This fan-out runs at most once per unique month per import run.
+      await ensureAllMarketCycles(yearMonth, markets, globallyInitializedMonths)
 
       let cycle = await prisma.monthlyCycle.findUnique({
         where: { month_marketId: { month: yearMonth, marketId: market.id } },
@@ -304,7 +338,9 @@ export async function importUSARows(rows: USARow[]): Promise<ImportResult> {
   const fEKP = await prisma.fiber.findUnique({ where: { code: "EKP" } })
   if (!fEKP) { result.errors.push("EKP fiber not found"); return result }
 
+  const allMarkets = await prisma.market.findMany({ select: { id: true } })
   const customers = await prisma.customer.findMany({ where: { marketId: usaMarket.id } })
+  const globallyInitializedMonths = new Set<string>()
 
   for (const row of rows) {
     try {
@@ -342,6 +378,9 @@ export async function importUSARows(rows: USARow[]): Promise<ImportResult> {
         result.skipped++
         continue
       }
+
+      // Ensure every market has a cycle for this month before writing USA data.
+      await ensureAllMarketCycles(row.month, allMarkets, globallyInitializedMonths)
 
       let cycle = await prisma.monthlyCycle.findUnique({
         where: { month_marketId: { month: row.month, marketId: usaMarket.id } },
