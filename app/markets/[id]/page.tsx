@@ -389,6 +389,34 @@ export default async function MarketDetailPage({
         </div>
 
         <div className="space-y-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Pending Tasks</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <MarketTasksPanel
+                marketId={market.id}
+                month={selectedMonth}
+                cycleId={cycle?.id ?? null}
+                initialTasks={marketTasks}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Market Notes</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <MarketNotesPanel
+                marketId={market.id}
+                month={selectedMonth}
+                cycleId={cycle?.id ?? null}
+                initialContent={marketNote?.content ?? ""}
+              />
+            </CardContent>
+          </Card>
+
           {cycle && (
             <Card>
               <CardHeader className="pb-2">
@@ -496,34 +524,6 @@ export default async function MarketDetailPage({
                   ))}
                 </tbody>
               </table>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Pending Tasks</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <MarketTasksPanel
-                marketId={market.id}
-                month={selectedMonth}
-                cycleId={cycle?.id ?? null}
-                initialTasks={marketTasks}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Market Notes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <MarketNotesPanel
-                marketId={market.id}
-                month={selectedMonth}
-                cycleId={cycle?.id ?? null}
-                initialContent={marketNote?.content ?? ""}
-              />
             </CardContent>
           </Card>
 
