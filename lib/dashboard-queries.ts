@@ -78,11 +78,16 @@ export type IndexSnapshotRow = {
 /**
  * Returns a complete five-row snapshot for the required hardwood indexes.
  *
- * Strategy: for each index fetch the single most recent stored value
- * (regardless of direction from currentMonth). This keeps the snapshot
- * populated even when index data is entered ahead of or behind the active
- * pricing cycle month.  Rows with no data at all are returned with
- * value = null so the UI can show them explicitly as missing.
+ * Selection rule:
+ *   1. Exclude any value with source = "forecast" — forecast rows from TTO
+ *      or similar importers must never appear as the primary snapshot value.
+ *   2. From the remaining actual/observed values, take the latest by month.
+ *   3. isCurrentMonth = true only when that latest month equals currentMonth.
+ *   4. When no non-forecast value exists at all, return value = null so the
+ *      UI renders an explicit missing indicator rather than silently omitting.
+ *
+ * This prevents future-dated TTO forecast rows (e.g. 2029-12) from surfacing
+ * as the primary snapshot while actual observed data is absent or stale.
  */
 export async function getDashboardIndexSnapshot(
   currentMonth: string
@@ -104,8 +109,9 @@ export async function getDashboardIndexSnapshot(
       continue
     }
 
+    // Exclude forecast rows — only use actual/observed values
     const latest = await prisma.indexValue.findFirst({
-      where: { indexId: def.id },
+      where: { indexId: def.id, NOT: { source: "forecast" } },
       orderBy: { month: "desc" },
     })
 

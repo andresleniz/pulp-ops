@@ -13,10 +13,21 @@
  *   Col 0  : date string for every data row
  *   Col 1+ : one price series each
  *
- * STORAGE CONTRACT
- *   For each series, one IndexValue per calendar month is written.
- *   For weekly/biweekly series the LATEST observation within that month wins.
- *   The publicationDate field stores the actual observation date (YYYY-MM-DD).
+ * STORAGE CONTRACT — MONTHLY GRAIN
+ *   IndexValue has a @@unique([indexId, month]) constraint, so only one value
+ *   per calendar month can be stored per series regardless of posting frequency.
+ *   Aggregation rule applied at import time:
+ *     → For each (series, YYYY-MM), the observation with the LATEST date within
+ *       that month is selected and stored.  Earlier observations in the same
+ *       month are discarded at import time, not stored.
+ *   This means:
+ *     - A weekly series (e.g. FP-PLP-0033, FP-PLP-0040) with ~4 obs/month is
+ *       collapsed to 1 value/month (the last weekly print of the month).
+ *     - A biweekly series (e.g. FP-PLP-0027) with 2 obs/month is collapsed
+ *       similarly.
+ *     - Monthly series (e.g. FP-PLP-0018) are unaffected (already 1/month).
+ *   The publicationDate field stores the actual observation date of the retained
+ *   point (YYYY-MM-DD), preserving traceability.
  *   Source is stamped "Fastmarkets" on every value.
  *
  * DASHBOARD MAPPING
@@ -30,11 +41,22 @@
 /**
  * Maps Fastmarkets symbol → the IndexDefinition.name used in the dashboard.
  * Extend this table whenever a new series is needed on a dashboard card.
+ *
+ * PROXY MAPPING — FP-PLP-0040
+ *   Description: "PIX Pulp BHKP USD"
+ *   This is the FOEX/PIX European Bleached Hardwood Kraft Pulp benchmark priced
+ *   in USD.  It is NOT the same publication as "RISI Europe HW" (RISI is a
+ *   separate Fastmarkets brand from PIX/FOEX).  This file contains no
+ *   RISI-branded European hardwood series.  FP-PLP-0040 is mapped here as the
+ *   closest available proxy for "RISI Europe HW" on the dashboard.
+ *   Review: if a dedicated RISI Europe HW series becomes available in a future
+ *   Fastmarkets export, update this mapping to that symbol and remove this note.
  */
 export const SYMBOL_NAME_MAP: Record<string, string> = {
-  "FP-PLP-0033": "PIX China",       // PIX Pulp China BHKP Net → existing "PIX China" definition
-  "FP-PLP-0040": "RISI Europe HW",  // PIX Pulp BHKP USD (European benchmark)
-  "FP-PLP-0027": "RISI USA HW",     // BHK spot price, delivered US East
+  "FP-PLP-0033": "PIX China",      // PIX Pulp China BHKP Net — direct match
+  "FP-PLP-0027": "RISI USA HW",    // BHK spot price, delivered US East — direct match
+  // PROXY: PIX BHKP USD used as European HW benchmark proxy (no RISI Europe series in file)
+  "FP-PLP-0040": "RISI Europe HW",
 }
 
 export function normalizeFastmarketsName(
