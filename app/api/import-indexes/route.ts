@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import Decimal from "decimal.js"
 import crypto from "crypto"
-import { parseFastmarketsFile } from "@/lib/fastmarkets-importer"
+import { parseFastmarketsFile, storageKey } from "@/lib/fastmarkets-importer"
 
 export const maxDuration = 60 // seconds
 
@@ -469,7 +469,25 @@ export async function POST(req: NextRequest) {
       newDefs.forEach((d) => nameToId.set(d.name, d.id))
     }
 
-    // Build upsert rows: one per (indexId, month) using the latest observation per month
+    // Cleanup: remove any previously imported Fastmarkets rows stored with the
+    // old monthly-grain format (7-char YYYY-MM keys) for affected index IDs.
+    // These will be replaced by the full-precision daily-keyed observations below.
+    const affectedIds = series
+      .map((s) => nameToId.get(s.normalizedName))
+      .filter((id): id is string => Boolean(id))
+
+    if (affectedIds.length > 0) {
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM "IndexValue"
+         WHERE source = 'Fastmarkets'
+           AND "indexId" = ANY($1::text[])
+           AND length(month) = 7`,
+        affectedIds
+      )
+    }
+
+    // Build upsert rows: one per observation, keyed by storageKey (YYYY-MM-DD for
+    // weekly/biweekly, YYYY-MM for monthly)
     const upsertRows: { indexId: string; month: string; value: number; source: string; publicationDate: Date | null }[] = []
 
     const reportSeries: Array<{
@@ -485,13 +503,13 @@ export async function POST(req: NextRequest) {
       const indexId = nameToId.get(s.normalizedName)
       if (!indexId) continue
 
-      for (const [month, { value, date }] of s.latestPerMonth) {
+      for (const obs of s.observations) {
         upsertRows.push({
           indexId,
-          month,
-          value,
+          month: storageKey(obs.date, s.frequency),
+          value: obs.value,
           source: "Fastmarkets",
-          publicationDate: new Date(date),
+          publicationDate: new Date(obs.date),
         })
       }
 
@@ -501,7 +519,7 @@ export async function POST(req: NextRequest) {
         normalizedName: s.normalizedName,
         mapped: s.mapped,
         frequency: s.frequency,
-        pointsImported: s.latestPerMonth.size,
+        pointsImported: s.observations.length,
       })
     }
 

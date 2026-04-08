@@ -41,22 +41,15 @@
 /**
  * Maps Fastmarkets symbol → the IndexDefinition.name used in the dashboard.
  * Extend this table whenever a new series is needed on a dashboard card.
- *
- * PROXY MAPPING — FP-PLP-0040
- *   Description: "PIX Pulp BHKP USD"
- *   This is the FOEX/PIX European Bleached Hardwood Kraft Pulp benchmark priced
- *   in USD.  It is NOT the same publication as "RISI Europe HW" (RISI is a
- *   separate Fastmarkets brand from PIX/FOEX).  This file contains no
- *   RISI-branded European hardwood series.  FP-PLP-0040 is mapped here as the
- *   closest available proxy for "RISI Europe HW" on the dashboard.
- *   Review: if a dedicated RISI Europe HW series becomes available in a future
- *   Fastmarkets export, update this mapping to that symbol and remove this note.
  */
 export const SYMBOL_NAME_MAP: Record<string, string> = {
-  "FP-PLP-0033": "PIX China",      // PIX Pulp China BHKP Net — direct match
-  "FP-PLP-0027": "RISI USA HW",    // BHK spot price, delivered US East — direct match
-  // PROXY: PIX BHKP USD used as European HW benchmark proxy (no RISI Europe series in file)
-  "FP-PLP-0040": "RISI Europe HW",
+  "FP-PLP-0033": "PIX China",      // PIX Pulp China BHKP Net
+  "FP-PLP-0027": "RISI USA HW",    // BHK spot price, delivered US East
+  "FP-PLP-0040": "RISI Europe HW", // PIX Pulp BHKP USD — European BHKP benchmark
+  // Add future series here as they become available:
+  // "FP-PLP-XXXX": "RISI USA HW spot",
+  // "FP-PLP-XXXX": "TTO Softwood",
+  // "FP-PLP-XXXX": "RISI USA Softwood spot",
 }
 
 export function normalizeFastmarketsName(
@@ -146,11 +139,17 @@ export interface ParsedSeries {
   frequency: SeriesFrequency
   /** All raw non-null observations in chronological order */
   observations: ParsedObservation[]
-  /**
-   * One entry per calendar month: the latest observation within that month.
-   * This is what gets written to IndexValue (one row per month).
-   */
-  latestPerMonth: Map<string, { value: number; date: string }>
+}
+
+/**
+ * Returns the storage key for an observation.
+ * Weekly/biweekly/irregular series: store at full YYYY-MM-DD precision so that
+ * each weekly point gets its own unique row in IndexValue (leveraging the
+ * @@unique([indexId, month]) constraint — month field accepts any string).
+ * Monthly series: store at YYYY-MM so the constraint keeps one value/month.
+ */
+export function storageKey(date: string, freq: SeriesFrequency): string {
+  return freq === "monthly" ? date.slice(0, 7) : date
 }
 
 // ── Main parser ───────────────────────────────────────────────────────────────
@@ -226,15 +225,6 @@ export function parseFastmarketsFile(
     const medianGap = computeMedianGap(sortedDates)
     const frequency = inferFrequency(medianGap)
 
-    // Latest observation per month (newest date within each month wins)
-    const latestPerMonth = new Map<string, { value: number; date: string }>()
-    for (const obs of b.points) {
-      const existing = latestPerMonth.get(obs.month)
-      if (!existing || obs.date > existing.date) {
-        latestPerMonth.set(obs.month, { value: obs.value, date: obs.date })
-      }
-    }
-
     return {
       symbol: b.symbol,
       rawDescription: b.description,
@@ -243,7 +233,6 @@ export function parseFastmarketsFile(
       mapped: b.mapped,
       frequency,
       observations: b.points,
-      latestPerMonth,
     }
   })
 

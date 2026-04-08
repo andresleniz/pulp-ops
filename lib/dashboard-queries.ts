@@ -69,29 +69,44 @@ export type IndexSnapshotRow = {
   display: string
   /** Numeric value in USD/ADT, or null when no data exists. */
   value: number | null
-  /** The month (YYYY-MM) the value belongs to, or null when no data. */
+  /**
+   * The month key the value was stored under (YYYY-MM or YYYY-MM-DD for
+   * weekly series), or null when no data.
+   */
   month: string | null
-  /** True when the value's month equals the dashboard's current month. */
+  /** True when the value's month key falls within the dashboard's current month. */
   isCurrentMonth: boolean
+}
+
+/** Returns the first day of the month after `month` (YYYY-MM). */
+function nextMonthStr(month: string): string {
+  const [y, m] = month.split("-").map(Number)
+  return m === 12
+    ? `${y + 1}-01`
+    : `${y}-${String(m + 1).padStart(2, "0")}`
 }
 
 /**
  * Returns a complete five-row snapshot for the required hardwood indexes.
  *
  * Selection rule:
- *   1. Exclude any value with source = "forecast" — forecast rows from TTO
- *      or similar importers must never appear as the primary snapshot value.
- *   2. From the remaining actual/observed values, take the latest by month.
- *   3. isCurrentMonth = true only when that latest month equals currentMonth.
- *   4. When no non-forecast value exists at all, return value = null so the
- *      UI renders an explicit missing indicator rather than silently omitting.
+ *   1. Exclude any value with source = "forecast".
+ *   2. Try to find an observed value whose month key falls within currentMonth:
+ *        month >= currentMonth  AND  month < nextMonth
+ *      This handles both YYYY-MM keys (monthly series) and YYYY-MM-DD keys
+ *      (weekly/biweekly series stored at full date precision).
+ *      Take the latest by month key within that range → isCurrentMonth = true.
+ *   3. If no current-month value exists, fall back to the latest observed value
+ *      overall → isCurrentMonth = false (stale indicator shown in UI).
+ *   4. When no non-forecast value exists at all, return value = null.
  *
- * This prevents future-dated TTO forecast rows (e.g. 2029-12) from surfacing
- * as the primary snapshot while actual observed data is absent or stale.
+ * Future-dated values (e.g. TTO forecast rows at 2029-12) are excluded by rule 1.
+ * Weekly observations outside the current month window are shown as stale (rule 3).
  */
 export async function getDashboardIndexSnapshot(
   currentMonth: string
 ): Promise<IndexSnapshotRow[]> {
+  const nextMonth = nextMonthStr(currentMonth)
   const results: IndexSnapshotRow[] = []
 
   for (const req of REQUIRED_HARDWOOD_INDEXES) {
@@ -109,9 +124,30 @@ export async function getDashboardIndexSnapshot(
       continue
     }
 
-    // Exclude forecast rows — only use actual/observed values
+    const nonForecastWhere = { indexId: def.id, NOT: { source: "forecast" } }
+
+    // Try current-month window first (handles both YYYY-MM and YYYY-MM-DD keys)
+    const current = await prisma.indexValue.findFirst({
+      where: {
+        ...nonForecastWhere,
+        month: { gte: currentMonth, lt: nextMonth },
+      },
+      orderBy: { month: "desc" },
+    })
+
+    if (current) {
+      results.push({
+        display: req.display,
+        value: Number(current.value),
+        month: current.month,
+        isCurrentMonth: true,
+      })
+      continue
+    }
+
+    // Fallback: latest observed value regardless of month (shown as stale)
     const latest = await prisma.indexValue.findFirst({
-      where: { indexId: def.id, NOT: { source: "forecast" } },
+      where: nonForecastWhere,
       orderBy: { month: "desc" },
     })
 
@@ -124,7 +160,7 @@ export async function getDashboardIndexSnapshot(
       display: req.display,
       value: Number(latest.value),
       month: latest.month,
-      isCurrentMonth: latest.month === currentMonth,
+      isCurrentMonth: false,
     })
   }
 

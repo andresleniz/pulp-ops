@@ -1,6 +1,6 @@
 import XLSX from "xlsx"
 import crypto from "crypto"
-import { parseFastmarketsFile } from "@/lib/fastmarkets-importer"
+import { parseFastmarketsFile, storageKey } from "@/lib/fastmarkets-importer"
 import { prisma } from "@/lib/prisma"
 
 const FILE = "C:/Users/Andres Leniz/Downloads/Fastmarkets_2026_04_08-140501.xlsx"
@@ -18,16 +18,29 @@ async function main() {
   const defs = await prisma.indexDefinition.findMany({ where: { name: { in: allNames } }, select: { id: true, name: true } })
   const nameToId = new Map(defs.map(d => [d.name, d.id]))
 
-  // Build upsert rows
+  // Cleanup: remove old monthly-grain (YYYY-MM, 7-char) Fastmarkets rows
+  const affectedIds = allNames.map(n => nameToId.get(n)).filter(Boolean) as string[]
+  if (affectedIds.length > 0) {
+    const deleted = await prisma.$executeRawUnsafe(
+      `DELETE FROM "IndexValue"
+       WHERE source = 'Fastmarkets'
+         AND "indexId" = ANY($1::text[])
+         AND length(month) = 7`,
+      affectedIds
+    )
+    console.log(`Cleaned up ${deleted} old monthly-grain rows`)
+  }
+
+  // Build upsert rows using full observation grain
   const upsertRows: { indexId: string; month: string; value: number; publicationDate: string }[] = []
   for (const s of series) {
     const indexId = nameToId.get(s.normalizedName)!
-    for (const [month, { value, date }] of s.latestPerMonth) {
-      upsertRows.push({ indexId, month, value, publicationDate: date })
+    for (const obs of s.observations) {
+      upsertRows.push({ indexId, month: storageKey(obs.date, s.frequency), value: obs.value, publicationDate: obs.date })
     }
   }
 
-  console.log(`Total monthly values to upsert: ${upsertRows.length}`)
+  console.log(`Total observation values to upsert: ${upsertRows.length}`)
 
   // Process in chunks of 500 to avoid param limits
   const CHUNK = 500
