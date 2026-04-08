@@ -235,11 +235,11 @@ export default async function DashboardPage({
             </CardHeader>
             <CardContent className="px-4 pb-4">
               <div className="space-y-2">
-                {pendingTasks.slice(0, 6).map((task) => (
+                {pendingTasks.map((task) => (
                   <div key={task.id} className="flex items-start gap-2">
                     <div className="mt-1.5 h-2 w-2 rounded-full flex-shrink-0 bg-amber-400" />
                     <div className="min-w-0">
-                      <p className="text-xs text-gray-800 leading-snug truncate">{task.title}</p>
+                      <p className="text-xs text-gray-800 leading-snug">{task.title}</p>
                       <p className="text-xs text-gray-400">
                         {task.marketName}{task.month ? ` · ${task.month}` : ""}
                       </p>
@@ -248,9 +248,6 @@ export default async function DashboardPage({
                 ))}
                 {pendingTasks.length === 0 && <p className="text-xs text-gray-400">No open tasks.</p>}
               </div>
-              {pendingTasks.length > 6 && (
-                <p className="text-xs text-gray-400 mt-2">+{pendingTasks.length - 6} more tasks across markets</p>
-              )}
             </CardContent>
           </Card>
 
