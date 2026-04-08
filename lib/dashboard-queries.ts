@@ -58,11 +58,11 @@ export function sortByDisplayOrder<T extends { market: { name: string } }>(
  * Missing (not yet seeded): PIX Europe Hardwood, PIX USA Hardwood
  */
 const REQUIRED_HARDWOOD_INDEXES: { display: string; dbName: string | null }[] = [
-  { display: "PIX China Hardwood",  dbName: "PIX China" },
-  { display: "TTO China Hardwood",  dbName: "TTO China BHK" },
-  { display: "TTO USA Hardwood",    dbName: "TTO North America BHK" },
-  { display: "PIX Europe Hardwood", dbName: "PIX Europe Hardwood" },
-  { display: "PIX USA Hardwood",    dbName: "PIX USA Hardwood" },
+  { display: "PIX China Hardwood", dbName: "PIX China" },
+  { display: "TTO China Hardwood", dbName: "TTO China BHK" },
+  { display: "TTO USA Hardwood",   dbName: "TTO North America BHK" },
+  { display: "RISI Europe HW",     dbName: "RISI Europe HW" },
+  { display: "RISI USA HW",        dbName: "RISI USA HW" },
 ]
 
 export type IndexSnapshotRow = {
