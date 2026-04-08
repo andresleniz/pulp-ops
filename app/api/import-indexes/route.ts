@@ -519,7 +519,7 @@ export async function POST(req: NextRequest) {
             r.source,
             r.publicationDate ? r.publicationDate.toISOString() : null,
           )
-          return `($${base},$${base+1},$${base+2},$${base+3},NOW(),NOW(),$${base+4},$${base+5})`
+          return `($${base},$${base+1},$${base+2},$${base+3},NOW(),NOW(),$${base+4},$${base+5}::timestamp)`
         })
         .join(",")
 
