@@ -2,10 +2,15 @@ import { prisma } from "@/lib/prisma"
 import { saveIndexValue, triggerRecalculate } from "./actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import IndexUploader from "./IndexUploader"
-import IndexChartsClient from "./IndexChartsClient"
-import type { ChartGroup } from "./IndexCharts"
+import IndexesCanvas from "./IndexesCanvas"
+import { getLayout } from "@/lib/page-layout"
+import { indexWidgetKey } from "@/lib/widget-catalog"
+import type { IndexTableData } from "./IndexesCanvas"
 
 export default async function IndexesPage() {
+  const layout = await getLayout("indexes")
+
+  // Fetch all definitions + last 12 non-forecast values each
   const definitions = await prisma.indexDefinition.findMany({
     include: {
       values: {
@@ -17,45 +22,23 @@ export default async function IndexesPage() {
     orderBy: { name: "asc" },
   })
 
-  const PRIORITY: Record<string, number> = {
-    "PIX China": 0,
-    "TTO North America BHK": 1,
-    "TTO China BHK": 2,
-    "TTO China NBSK": 3,
-    "TTO North America NBSK": 4,
-    "TTO Global UKP UKP": 5,
-  }
-  definitions.sort((a, b) => {
-    const pa = PRIORITY[a.name] ?? 99
-    const pb = PRIORITY[b.name] ?? 99
-    if (pa !== pb) return pa - pb
-    return a.name.localeCompare(b.name)
-  })
+  // Serialize for client — Decimal → number, Date → ISO string
+  const allDefs: IndexTableData[] = definitions.map((def) => ({
+    id: def.id,
+    name: def.name,
+    unit: def.unit,
+    values: def.values.map((v) => ({
+      id: v.id,
+      month: v.month,
+      value: Number(v.value),
+      publicationDate: v.publicationDate?.toISOString().slice(0, 10) ?? null,
+    })),
+  }))
 
-  // Build chart groups from the same definitions data (same months as tables)
-  // Values are currently desc-sorted; reverse to asc for charts
-  function shortName(name: string, prefix: string) {
-    return name.replace(prefix, "").trim() || name
-  }
-  const GROUPS: { title: string; prefix: string }[] = [
-    { title: "PIX China", prefix: "PIX China" },
-    { title: "TTO North America", prefix: "TTO North America " },
-    { title: "TTO China", prefix: "TTO China " },
-    { title: "TTO Europe", prefix: "TTO Europe " },
-    { title: "TTO Global UKP", prefix: "TTO Global UKP " },
-  ]
-  const chartGroups: ChartGroup[] = GROUPS.map(({ title, prefix }) => {
-    const matching = definitions.filter((d) =>
-      title === "PIX China" ? d.name === "PIX China" : d.name.startsWith(prefix)
-    )
-    return {
-      title,
-      series: matching.map((d) => ({
-        name: title === "PIX China" ? "PIX China" : shortName(d.name, prefix) || d.name,
-        data: [...d.values].reverse().map((v) => ({ month: v.month, value: Number(v.value) })),
-      })),
-    }
-  }).filter((g) => g.series.some((s) => s.data.length > 0))
+  // Map layout keys (may use old id-based keys or name-based keys) → canonical idx:name
+  const canonicalLayout = layout.filter((key) =>
+    allDefs.some((d) => indexWidgetKey(d.name) === key)
+  )
 
   const dependentMarkets = await prisma.pricingRule.findMany({
     where: { method: "index_formula", isActive: true },
@@ -72,60 +55,13 @@ export default async function IndexesPage() {
         </p>
       </div>
 
-      <IndexChartsClient groups={chartGroups} />
-
       <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 space-y-4">
-          {definitions.map((def) => (
-            <Card key={def.id}>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-medium">{def.name}</CardTitle>
-                  <span className="text-xs text-gray-400">{def.unit}</span>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-xs text-gray-400 border-b">
-                      <th className="text-left pb-2 font-medium">Month</th>
-                      <th className="text-right pb-2 font-medium">Value</th>
-                      <th className="text-right pb-2 font-medium">Published</th>
-                      <th className="text-right pb-2 font-medium">Change</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {def.values.map((v, i) => {
-                      const prev = def.values[i + 1]
-                      const change = prev
-                        ? Math.round((Number(v.value) - Number(prev.value)) * 10) / 10
-                        : null
-                      return (
-                        <tr key={v.id} className="border-b border-gray-50 hover:bg-gray-50">
-                          <td className="py-2 font-mono text-xs">{v.month}</td>
-                          <td className="py-2 text-right font-semibold">
-                            {Number(v.value).toFixed(0)}
-                          </td>
-                          <td className="py-2 text-right text-gray-400 text-xs">
-                            {v.publicationDate?.toISOString().slice(0, 10) ?? "—"}
-                          </td>
-                          <td className={`py-2 text-right text-xs font-medium ${change === null ? "text-gray-400" : change > 0 ? "text-green-600" : change < 0 ? "text-red-600" : "text-gray-400"}`}>
-                            {change === null
-                              ? "—"
-                              : change > 0
-                              ? `+${change.toFixed(1)}`
-                              : change.toFixed(1)}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </CardContent>
-            </Card>
-          ))}
+        {/* Main canvas — 2/3 width */}
+        <div className="col-span-2">
+          <IndexesCanvas initialLayout={canonicalLayout} allDefs={allDefs} />
         </div>
 
+        {/* Tools sidebar — 1/3 width, unchanged */}
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-2">
@@ -153,7 +89,7 @@ export default async function IndexesPage() {
                   <input
                     type="month"
                     name="month"
-                    defaultValue="2025-04"
+                    defaultValue="2026-04"
                     className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
                     required
                   />
@@ -202,7 +138,7 @@ export default async function IndexesPage() {
                   <input
                     type="month"
                     name="month"
-                    defaultValue="2025-04"
+                    defaultValue="2026-04"
                     className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
                     required
                   />

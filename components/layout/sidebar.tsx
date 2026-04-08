@@ -15,6 +15,7 @@ const nav = [
   {
     label: "Pricing", items: [
       { href: "/indexes", label: "Indexes", icon: "≡" },
+      { href: "/charts", label: "Charts", icon: "∿" },
     ]
   },
   {

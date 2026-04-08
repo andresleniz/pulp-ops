@@ -531,3 +531,15 @@ enum MarketTaskStatus {
   pending
   done
 }
+
+model PageLayout {
+  id        String   @id @default(cuid())
+  page      String   // "charts" | "indexes"
+  widgetKey String   // "chart:tto-china" | "idx:PIX China" etc.
+  position  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([page, widgetKey])
+  @@index([page, position])
+}
