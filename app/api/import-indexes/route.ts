@@ -492,8 +492,12 @@ export async function POST(req: NextRequest) {
     console.log(`[fastmarkets] cleanup: deleted ${totalDeleted} old monthly-grain rows`)
 
     // Build upsert rows: one per observation, keyed by storageKey (YYYY-MM-DD for
-    // weekly/biweekly, YYYY-MM for monthly)
-    const upsertRows: { indexId: string; month: string; value: number; source: string; publicationDate: Date | null }[] = []
+    // weekly/biweekly, YYYY-MM for monthly).
+    // Deduplicate by (indexId, month) — monthly series can have two raw rows in the
+    // same calendar month (e.g. FP-PLP-0015 has duplicate months 2020-10 and 2026-03).
+    // Winner = latest publicationDate; if tied, last parsed row from file wins.
+    type UpsertRow = { indexId: string; month: string; value: number; source: string; publicationDate: Date | null }
+    const upsertMap = new Map<string, UpsertRow>()
 
     const reportSeries: Array<{
       symbol: string
@@ -504,18 +508,34 @@ export async function POST(req: NextRequest) {
       pointsImported: number
     }> = []
 
+    let totalParsedObs = 0
+    let totalCollapsed = 0
+
     for (const s of series) {
       const indexId = nameToId.get(s.normalizedName)
       if (!indexId) continue
+      totalParsedObs += s.observations.length
 
       for (const obs of s.observations) {
-        upsertRows.push({
+        const key = `${indexId}|${storageKey(obs.date, s.frequency)}`
+        const incoming: UpsertRow = {
           indexId,
           month: storageKey(obs.date, s.frequency),
           value: obs.value,
           source: "Fastmarkets",
           publicationDate: new Date(obs.date),
-        })
+        }
+        const existing = upsertMap.get(key)
+        if (existing) {
+          totalCollapsed++
+          // Keep the row with the later observation date
+          if (!existing.publicationDate || (incoming.publicationDate && incoming.publicationDate > existing.publicationDate)) {
+            upsertMap.set(key, incoming)
+          }
+          console.log(`[fastmarkets] duplicate collapsed: ${s.normalizedName} ${storageKey(obs.date, s.frequency)}`)
+        } else {
+          upsertMap.set(key, incoming)
+        }
       }
 
       reportSeries.push({
@@ -527,6 +547,9 @@ export async function POST(req: NextRequest) {
         pointsImported: s.observations.length,
       })
     }
+
+    const upsertRows = [...upsertMap.values()]
+    console.log(`[fastmarkets] observations: ${totalParsedObs} parsed, ${upsertRows.length} after dedup (${totalCollapsed} collapsed)`)
 
     // Upsert in chunks of 250 rows (6 params each = 1500 params/batch, well
     // under the 32767 PostgreSQL bind-variable limit).
@@ -567,7 +590,9 @@ export async function POST(req: NextRequest) {
       success: true,
       sourceFile: file.name,
       totalSeriesFound: series.length,
+      totalParsedObs,
       totalPointsImported: totalUpserted,
+      duplicatesCollapsed: totalCollapsed,
       rowsDeleted: totalDeleted,
       skippedRows,
       mapped: reportSeries.filter((s) => s.mapped).map((s) => s.normalizedName),

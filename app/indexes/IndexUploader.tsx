@@ -30,7 +30,9 @@ interface UploadResult {
   // Fastmarkets
   sourceFile?: string
   totalSeriesFound?: number
+  totalParsedObs?: number
   totalPointsImported?: number
+  duplicatesCollapsed?: number
   rowsDeleted?: number
   skippedRows?: number
   mapped?: string[]
@@ -167,6 +169,7 @@ function UploadPanel({
                   <>
                     <p className="font-semibold">
                       {result.totalSeriesFound} series · {result.totalPointsImported} observations upserted
+                      {result.duplicatesCollapsed ? ` · ${result.duplicatesCollapsed} duplicates collapsed` : ""}
                       {result.rowsDeleted ? ` · ${result.rowsDeleted} old rows removed` : ""}
                     </p>
                     <div className="space-y-0.5">
