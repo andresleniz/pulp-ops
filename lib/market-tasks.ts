@@ -8,6 +8,34 @@ export type MarketTaskRow = {
   createdAt: Date
 }
 
+export type PendingMarketTask = {
+  id: string
+  title: string
+  status: MarketTaskStatus
+  marketId: string
+  marketName: string
+  month: string | null
+  createdAt: Date
+}
+
+/** All pending MarketTask rows across every market, newest month first. */
+export async function getAllPendingTasks(): Promise<PendingMarketTask[]> {
+  const tasks = await prisma.marketTask.findMany({
+    where: { status: "pending" },
+    include: { market: { select: { id: true, name: true } } },
+    orderBy: [{ month: "desc" }, { createdAt: "desc" }],
+  })
+  return tasks.map((t) => ({
+    id: t.id,
+    title: t.title,
+    status: t.status,
+    marketId: t.market.id,
+    marketName: t.market.name,
+    month: t.month,
+    createdAt: t.createdAt,
+  }))
+}
+
 export async function listMarketTasks(
   marketId: string,
   month: string,

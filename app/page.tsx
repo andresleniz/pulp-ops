@@ -1,9 +1,10 @@
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
-import { getOpenTasks } from "@/lib/task-engine"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { createNextMonthCycles } from "./actions"
 import { DashboardMonthSelector } from "@/components/dashboard/month-selector"
+import { getAllPendingTasks } from "@/lib/market-tasks"
+import { getDashboardIndexSnapshot, sortByDisplayOrder } from "@/lib/dashboard-queries"
 
 function statusColor(status: string) {
   const map: Record<string, string> = {
@@ -57,28 +58,24 @@ export default async function DashboardPage({
   const nextMonth = getNextMonth(CURRENT_MONTH)
   const nextMonthExists = months.includes(nextMonth)
 
-  const [cycles, tasks, indexes] = await Promise.all([
+  const [cyclesRaw, pendingTasks, indexes] = await Promise.all([
     prisma.monthlyCycle.findMany({
       where: { month: CURRENT_MONTH },
       include: {
         market: { include: { region: true } },
         monthlyPrices: { include: { fiber: true, mill: true } },
       },
-      orderBy: { market: { name: "asc" } },
     }),
-    getOpenTasks(CURRENT_MONTH),
-    prisma.indexValue.findMany({
-      where: { month: CURRENT_MONTH },
-      include: { index: true },
-      orderBy: { index: { name: "asc" } },
-    }),
+    getAllPendingTasks(),
+    getDashboardIndexSnapshot(CURRENT_MONTH),
   ])
+
+  // Apply fixed business-priority market ordering
+  const cycles = sortByDisplayOrder(cyclesRaw)
 
   const decided = cycles.filter(
     (c) => c.priceStatus === "decided" || c.priceStatus === "revised"
   ).length
-
-  const highPri = tasks.filter((t) => t.priority === "high").length
 
   const emailsPending = await prisma.emailDraft.count({
     where: { month: CURRENT_MONTH, status: { in: ["pending", "draft_ready"] } },
@@ -111,7 +108,7 @@ export default async function DashboardPage({
         {[
           { label: "Markets Active", value: cycles.length, sub: CURRENT_MONTH },
           { label: "Prices Decided", value: `${decided}/${cycles.length}`, sub: "markets" },
-          { label: "Open Tasks", value: tasks.length, sub: `${highPri} high priority` },
+          { label: "Open Tasks", value: pendingTasks.length, sub: "pending" },
           { label: "Emails Pending", value: emailsPending, sub: "to send" },
         ].map((m) => (
           <Card key={m.label} className="bg-gray-50 border-gray-200">
@@ -238,21 +235,21 @@ export default async function DashboardPage({
             </CardHeader>
             <CardContent className="px-4 pb-4">
               <div className="space-y-2">
-                {tasks.slice(0, 6).map((task) => (
+                {pendingTasks.slice(0, 6).map((task) => (
                   <div key={task.id} className="flex items-start gap-2">
-                    <div className={`mt-1.5 h-2 w-2 rounded-full flex-shrink-0 ${task.priority === "high" ? "bg-red-500" : task.priority === "med" ? "bg-amber-400" : "bg-gray-300"}`} />
+                    <div className="mt-1.5 h-2 w-2 rounded-full flex-shrink-0 bg-amber-400" />
                     <div className="min-w-0">
-                      <p className="text-xs text-gray-800 leading-snug">{task.type.replace(/_/g, " ")}</p>
-                      <p className="text-xs text-gray-400">{task.cycle?.market.name} · {task.dueDate?.toISOString().slice(0, 10)}</p>
+                      <p className="text-xs text-gray-800 leading-snug truncate">{task.title}</p>
+                      <p className="text-xs text-gray-400">
+                        {task.marketName}{task.month ? ` · ${task.month}` : ""}
+                      </p>
                     </div>
                   </div>
                 ))}
-                {tasks.length === 0 && <p className="text-xs text-gray-400">No open tasks.</p>}
+                {pendingTasks.length === 0 && <p className="text-xs text-gray-400">No open tasks.</p>}
               </div>
-              {tasks.length > 6 && (
-                <Link href="/tasks" className="text-xs text-blue-600 mt-2 block">
-                  View all {tasks.length} tasks →
-                </Link>
+              {pendingTasks.length > 6 && (
+                <p className="text-xs text-gray-400 mt-2">+{pendingTasks.length - 6} more tasks across markets</p>
               )}
             </CardContent>
           </Card>
@@ -263,16 +260,21 @@ export default async function DashboardPage({
             </CardHeader>
             <CardContent className="px-4 pb-4">
               {indexes.map((idx) => (
-                <div key={idx.id} className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
-                  <span className="text-sm text-gray-700">{idx.index.name}</span>
-                  <span className="text-sm font-medium">
-                    ${Number(idx.value)} <span className="text-xs text-gray-400">USD/ADT</span>
-                  </span>
+                <div key={idx.display} className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
+                  <span className="text-xs text-gray-700">{idx.display}</span>
+                  {idx.value !== null ? (
+                    <div className="text-right">
+                      <span className="text-sm font-medium">${idx.value}</span>
+                      <span className="text-xs text-gray-400 ml-1">USD/ADT</span>
+                      {!idx.isCurrentMonth && idx.month && (
+                        <span className="text-xs text-amber-500 ml-1">({idx.month})</span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-gray-400">—</span>
+                  )}
                 </div>
               ))}
-              {indexes.length === 0 && (
-                <p className="text-xs text-gray-400">No indexes for {CURRENT_MONTH}.</p>
-              )}
               <Link href="/indexes" className="text-xs text-blue-600 mt-2 block">
                 Manage indexes →
               </Link>
