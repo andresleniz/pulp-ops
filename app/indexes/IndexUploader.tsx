@@ -4,20 +4,37 @@ import { useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
-type UploadType = "pix_china" | "tto"
+type UploadType = "pix_china" | "tto" | "fastmarkets"
+
+interface FastmarketsSeries {
+  symbol: string
+  rawDescription: string
+  normalizedName: string
+  mapped: boolean
+  frequency: string
+  pointsImported: number
+}
 
 interface UploadResult {
   success: boolean
   error?: string
   debug?: { totalRows: number; first6Rows: unknown[][] }
-  // PIX China result
+  // PIX China
   index?: string
   months?: string[]
   created?: number
   updated?: number
-  // TTO result
+  // TTO
   totalRows?: number
   indexes?: Record<string, { rows: number; lastActual: string }>
+  // Fastmarkets
+  sourceFile?: string
+  totalSeriesFound?: number
+  totalPointsImported?: number
+  skippedRows?: number
+  mapped?: string[]
+  unmapped?: string[]
+  series?: FastmarketsSeries[]
 }
 
 function UploadPanel({
@@ -144,6 +161,34 @@ function UploadPanel({
                     </div>
                   </>
                 )}
+                {/* Fastmarkets */}
+                {result.series && (
+                  <>
+                    <p className="font-semibold">
+                      {result.totalSeriesFound} series · {result.totalPointsImported} monthly values upserted
+                    </p>
+                    <div className="space-y-0.5">
+                      {result.series.map((s) => (
+                        <p key={s.symbol} className="font-mono leading-relaxed">
+                          <span className={s.mapped ? "text-green-700" : "text-amber-700"}>
+                            {s.normalizedName}
+                          </span>
+                          <span className="text-green-500 ml-2">
+                            {s.symbol} · {s.frequency} · {s.pointsImported} months
+                          </span>
+                          {!s.mapped && (
+                            <span className="text-amber-500 ml-1">[unmapped]</span>
+                          )}
+                        </p>
+                      ))}
+                    </div>
+                    {result.unmapped && result.unmapped.length > 0 && (
+                      <p className="text-amber-700 mt-1">
+                        {result.unmapped.length} unmapped series preserved — add to SYMBOL_NAME_MAP to link to dashboard cards.
+                      </p>
+                    )}
+                  </>
+                )}
               </>
             ) : (
               <>
@@ -170,6 +215,11 @@ function UploadPanel({
 export default function IndexUploader() {
   return (
     <div className="space-y-4">
+      <UploadPanel
+        label="Import Fastmarkets"
+        type="fastmarkets"
+        hint="Fastmarkets column-oriented export — Symbol/Description header rows, dated values below. Handles PIX, RISI, and all other Fastmarkets series."
+      />
       <UploadPanel
         label="Import PIX China"
         type="pix_china"

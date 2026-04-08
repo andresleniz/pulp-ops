@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import Decimal from "decimal.js"
 import crypto from "crypto"
+import { parseFastmarketsFile } from "@/lib/fastmarkets-importer"
 
 export const maxDuration = 60 // seconds
 
@@ -240,9 +241,9 @@ export async function POST(req: NextRequest) {
     const url = new URL(req.url)
     const type = url.searchParams.get("type") // "pix_china" | "tto"
 
-    if (!type || !["pix_china", "tto"].includes(type)) {
+    if (!type || !["pix_china", "tto", "fastmarkets"].includes(type)) {
       return NextResponse.json(
-        { error: 'Missing or invalid ?type= parameter. Use "pix_china" or "tto".' },
+        { error: 'Missing or invalid ?type= parameter. Use "pix_china", "tto", or "fastmarkets".' },
         { status: 400 }
       )
     }
@@ -303,6 +304,7 @@ export async function POST(req: NextRequest) {
     }
 
     // TTO
+    if (type === "tto") {
     const rawRows = XLSX.utils.sheet_to_json(sheet, {
       header: 1,
       defval: null,
@@ -424,6 +426,124 @@ export async function POST(req: NextRequest) {
       totalRows: allRows.length,
       indexes: summary,
     })
+    } // end if (type === "tto")
+
+  // ── Fastmarkets ───────────────────────────────────────────────────────────────
+  if (type === "fastmarkets") {
+    const rawRows = XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      defval: null,
+    }) as unknown[][]
+
+    const { series, skippedRows } = parseFastmarketsFile(rawRows, file.name)
+
+    if (series.length === 0) {
+      return NextResponse.json(
+        { error: "No series found. Ensure this is a Fastmarkets column-oriented export with Symbol/Description header rows." },
+        { status: 400 }
+      )
+    }
+
+    // Resolve or create IndexDefinition for each series
+    const allNames = [...new Set(series.map((s) => s.normalizedName))]
+    const existingDefs = await prisma.indexDefinition.findMany({
+      where: { name: { in: allNames } },
+      select: { id: true, name: true },
+    })
+    const nameToId = new Map(existingDefs.map((d) => [d.name, d.id]))
+
+    const missing = allNames.filter((n) => !nameToId.has(n))
+    if (missing.length > 0) {
+      await prisma.indexDefinition.createMany({
+        data: missing.map((name) => ({
+          name,
+          unit: "USD/ADT",
+          description: series.find((s) => s.normalizedName === name)?.rawDescription ?? null,
+        })),
+        skipDuplicates: true,
+      })
+      const newDefs = await prisma.indexDefinition.findMany({
+        where: { name: { in: missing } },
+        select: { id: true, name: true },
+      })
+      newDefs.forEach((d) => nameToId.set(d.name, d.id))
+    }
+
+    // Build upsert rows: one per (indexId, month) using the latest observation per month
+    const upsertRows: { indexId: string; month: string; value: number; source: string; publicationDate: Date | null }[] = []
+
+    const reportSeries: Array<{
+      symbol: string
+      rawDescription: string
+      normalizedName: string
+      mapped: boolean
+      frequency: string
+      pointsImported: number
+    }> = []
+
+    for (const s of series) {
+      const indexId = nameToId.get(s.normalizedName)
+      if (!indexId) continue
+
+      for (const [month, { value, date }] of s.latestPerMonth) {
+        upsertRows.push({
+          indexId,
+          month,
+          value,
+          source: "Fastmarkets",
+          publicationDate: new Date(date),
+        })
+      }
+
+      reportSeries.push({
+        symbol: s.symbol,
+        rawDescription: s.rawDescription,
+        normalizedName: s.normalizedName,
+        mapped: s.mapped,
+        frequency: s.frequency,
+        pointsImported: s.latestPerMonth.size,
+      })
+    }
+
+    // Bulk upsert with publicationDate
+    if (upsertRows.length > 0) {
+      const params: (string | number | null)[] = []
+      const placeholders = upsertRows
+        .map((r) => {
+          const base = params.length + 1
+          params.push(
+            crypto.randomUUID(),
+            r.indexId,
+            r.month,
+            r.value,
+            r.source,
+            r.publicationDate ? r.publicationDate.toISOString() : null,
+          )
+          return `($${base},$${base+1},$${base+2},$${base+3},NOW(),NOW(),$${base+4},$${base+5})`
+        })
+        .join(",")
+
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "IndexValue" (id,"indexId",month,value,"createdAt","updatedAt",source,"publicationDate")
+         VALUES ${placeholders}
+         ON CONFLICT ("indexId",month) DO UPDATE
+           SET value=EXCLUDED.value,"updatedAt"=NOW(),source=EXCLUDED.source,"publicationDate"=EXCLUDED."publicationDate"`,
+        ...params
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      sourceFile: file.name,
+      totalSeriesFound: series.length,
+      totalPointsImported: upsertRows.length,
+      skippedRows,
+      mapped: reportSeries.filter((s) => s.mapped).map((s) => s.normalizedName),
+      unmapped: reportSeries.filter((s) => !s.mapped).map((s) => s.normalizedName),
+      series: reportSeries,
+    })
+  }
+
   } catch (err) {
     console.error("[import-indexes] Error:", err)
     return NextResponse.json({ error: String(err) }, { status: 500 })
