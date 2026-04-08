@@ -31,6 +31,7 @@ interface UploadResult {
   sourceFile?: string
   totalSeriesFound?: number
   totalPointsImported?: number
+  rowsDeleted?: number
   skippedRows?: number
   mapped?: string[]
   unmapped?: string[]
@@ -165,7 +166,8 @@ function UploadPanel({
                 {result.series && (
                   <>
                     <p className="font-semibold">
-                      {result.totalSeriesFound} series · {result.totalPointsImported} monthly values upserted
+                      {result.totalSeriesFound} series · {result.totalPointsImported} observations upserted
+                      {result.rowsDeleted ? ` · ${result.rowsDeleted} old rows removed` : ""}
                     </p>
                     <div className="space-y-0.5">
                       {result.series.map((s) => (

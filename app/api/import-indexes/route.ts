@@ -471,20 +471,25 @@ export async function POST(req: NextRequest) {
 
     // Cleanup: remove any previously imported Fastmarkets rows stored with the
     // old monthly-grain format (7-char YYYY-MM keys) for affected index IDs.
-    // These will be replaced by the full-precision daily-keyed observations below.
+    // Chunked to avoid bind-variable limits (1 param per ID chunk of 500).
     const affectedIds = series
       .map((s) => nameToId.get(s.normalizedName))
       .filter((id): id is string => Boolean(id))
 
-    if (affectedIds.length > 0) {
-      await prisma.$executeRawUnsafe(
+    const DELETE_CHUNK = 500
+    let totalDeleted = 0
+    for (let i = 0; i < affectedIds.length; i += DELETE_CHUNK) {
+      const chunk = affectedIds.slice(i, i + DELETE_CHUNK)
+      const deleted = await prisma.$executeRawUnsafe(
         `DELETE FROM "IndexValue"
          WHERE source = 'Fastmarkets'
            AND "indexId" = ANY($1::text[])
            AND length(month) = 7`,
-        affectedIds
+        chunk
       )
+      totalDeleted += deleted
     }
+    console.log(`[fastmarkets] cleanup: deleted ${totalDeleted} old monthly-grain rows`)
 
     // Build upsert rows: one per observation, keyed by storageKey (YYYY-MM-DD for
     // weekly/biweekly, YYYY-MM for monthly)
@@ -523,10 +528,14 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Bulk upsert with publicationDate
-    if (upsertRows.length > 0) {
+    // Upsert in chunks of 250 rows (6 params each = 1500 params/batch, well
+    // under the 32767 PostgreSQL bind-variable limit).
+    const UPSERT_CHUNK = 250
+    let totalUpserted = 0
+    for (let i = 0; i < upsertRows.length; i += UPSERT_CHUNK) {
+      const chunk = upsertRows.slice(i, i + UPSERT_CHUNK)
       const params: (string | number | null)[] = []
-      const placeholders = upsertRows
+      const placeholders = chunk
         .map((r) => {
           const base = params.length + 1
           params.push(
@@ -548,13 +557,18 @@ export async function POST(req: NextRequest) {
            SET value=EXCLUDED.value,"updatedAt"=NOW(),source=EXCLUDED.source,"publicationDate"=EXCLUDED."publicationDate"`,
         ...params
       )
+      totalUpserted += chunk.length
+      console.log(`[fastmarkets] upsert batch ${Math.ceil((i + 1) / UPSERT_CHUNK)}: ${totalUpserted}/${upsertRows.length} rows`)
     }
+
+    console.log(`[fastmarkets] complete: ${totalUpserted} rows upserted across ${Math.ceil(upsertRows.length / UPSERT_CHUNK)} batches`)
 
     return NextResponse.json({
       success: true,
       sourceFile: file.name,
       totalSeriesFound: series.length,
-      totalPointsImported: upsertRows.length,
+      totalPointsImported: totalUpserted,
+      rowsDeleted: totalDeleted,
       skippedRows,
       mapped: reportSeries.filter((s) => s.mapped).map((s) => s.normalizedName),
       unmapped: reportSeries.filter((s) => !s.mapped).map((s) => s.normalizedName),
