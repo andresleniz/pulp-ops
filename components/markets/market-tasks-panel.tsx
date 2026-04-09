@@ -12,12 +12,10 @@ type Task = {
 
 export function MarketTasksPanel({
   marketId,
-  month,
   cycleId,
   initialTasks,
 }: {
   marketId: string
-  month: string
   cycleId: string | null
   initialTasks: Task[]
 }) {
@@ -100,7 +98,6 @@ export function MarketTasksPanel({
         className="flex gap-1.5 pt-2 border-t border-gray-100"
       >
         <input type="hidden" name="marketId" value={marketId} />
-        <input type="hidden" name="month" value={month} />
         {cycleId && <input type="hidden" name="cycleId" value={cycleId} />}
         <input
           name="title"

@@ -82,12 +82,6 @@ export default async function MarketDetailPage({
       })
     : []
 
-  const allCycles = await prisma.monthlyCycle.findMany({
-    where: { marketId: market.id },
-    orderBy: { month: "desc" },
-    take: 12,
-  })
-
   const volumeAdjustments = await prisma.volumeAdjustment.findMany({
     where: { marketId: market.id, month: selectedMonth },
     include: {
@@ -187,7 +181,8 @@ export default async function MarketDetailPage({
   const volumeChartByFiber = await getVolumeChartData({ marketId: market.id, months: chartMonths })
 
   // ── Market tasks & notes ─────────────────────────────────────────────────
-  const marketTasks = await listMarketTasks(market.id, selectedMonth)
+  // Tasks are market-scoped — visible regardless of which month is selected
+  const marketTasks = await listMarketTasks(market.id)
   const marketNote = await getMarketNote(market.id, selectedMonth)
 
   return (
@@ -396,7 +391,6 @@ export default async function MarketDetailPage({
             <CardContent>
               <MarketTasksPanel
                 marketId={market.id}
-                month={selectedMonth}
                 cycleId={cycle?.id ?? null}
                 initialTasks={marketTasks}
               />
@@ -496,36 +490,6 @@ export default async function MarketDetailPage({
               </CardContent>
             </Card>
           )}
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Cycle History</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <table className="w-full text-xs">
-                <tbody>
-                  {allCycles.map((c) => (
-                    <tr key={c.id} className="border-b border-gray-50">
-                      <td className="py-1.5 text-gray-600">{c.month}</td>
-                      <td className="py-1.5">
-                        <span className={`px-1.5 py-0.5 rounded text-xs ${c.priceStatus === "decided" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
-                          {c.priceStatus.replace("_", " ")}
-                        </span>
-                      </td>
-                      <td className="py-1.5 text-right">
-                        <Link
-                          href={`/markets/${market.id}?month=${c.month}`}
-                          className="text-xs text-blue-600 hover:underline"
-                        >
-                          View
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
 
           <Card>
             <CardHeader className="pb-2">

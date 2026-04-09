@@ -45,7 +45,7 @@ export function PriceChart({ fiberCode, data, customers }: Props) {
             tick={{ fontSize: 11, fill: "#9ca3af" }}
             tickLine={false}
             axisLine={false}
-            domain={["auto", "auto"]}
+            domain={[450, 950]}
             tickFormatter={(v) => `$${v}`}
           />
           <Tooltip

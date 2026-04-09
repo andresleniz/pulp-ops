@@ -5,37 +5,70 @@ import IndexUploader from "./IndexUploader"
 import IndexesCanvas from "./IndexesCanvas"
 import { getLayout } from "@/lib/page-layout"
 import { indexWidgetKey } from "@/lib/widget-catalog"
-import type { IndexTableData } from "./IndexesCanvas"
+import type { IndexSeriesData } from "./IndexesCanvas"
+
+// ── Trailing-12-month window helper ──────────────────────────────────────────
+
+/**
+ * Given a month key (YYYY-MM or YYYY-MM-DD), returns the YYYY-MM string that
+ * is 11 months earlier — so [start, end] inclusive spans exactly 12 months.
+ */
+function trailingStartMonth(endMonthKey: string): string {
+  const base = endMonthKey.slice(0, 7)
+  const [y, m] = base.split("-").map(Number)
+  const startM = m - 11
+  const startY = startM <= 0 ? y - 1 : y
+  const normM = startM <= 0 ? 12 + startM : startM
+  return `${startY}-${String(normM).padStart(2, "0")}`
+}
 
 export default async function IndexesPage() {
   const layout = await getLayout("indexes")
 
-  // Fetch all definitions + last 12 non-forecast values each
+  // ── Fetch per-series trailing-12-month data ───────────────────────────────
   const definitions = await prisma.indexDefinition.findMany({
-    include: {
-      values: {
-        where: { OR: [{ source: null }, { source: { not: "forecast" } }] },
-        orderBy: { month: "desc" },
-        take: 12,
-      },
-    },
     orderBy: { name: "asc" },
   })
 
-  // Serialize for client — Decimal → number, Date → ISO string
-  const allDefs: IndexTableData[] = definitions.map((def) => ({
-    id: def.id,
-    name: def.name,
-    unit: def.unit,
-    values: def.values.map((v) => ({
-      id: v.id,
-      month: v.month,
-      value: Number(v.value),
-      publicationDate: v.publicationDate?.toISOString().slice(0, 10) ?? null,
-    })),
-  }))
+  const allDefs: IndexSeriesData[] = []
 
-  // Map layout keys (may use old id-based keys or name-based keys) → canonical idx:name
+  for (const def of definitions) {
+    // Find latest non-forecast observation to anchor the 12-month window
+    const latest = await prisma.indexValue.findFirst({
+      where: { indexId: def.id, NOT: { source: "forecast" } },
+      orderBy: { month: "desc" },
+    })
+
+    if (!latest) {
+      allDefs.push({ id: def.id, name: def.name, unit: def.unit, values: [] })
+      continue
+    }
+
+    const startMonth = trailingStartMonth(latest.month)
+
+    const values = await prisma.indexValue.findMany({
+      where: {
+        indexId: def.id,
+        NOT: { source: "forecast" },
+        month: { gte: startMonth },
+      },
+      orderBy: { month: "asc" },
+    })
+
+    allDefs.push({
+      id: def.id,
+      name: def.name,
+      unit: def.unit,
+      values: values.map((v) => ({
+        id: v.id,
+        month: v.month,
+        value: Number(v.value),
+        publicationDate: v.publicationDate?.toISOString().slice(0, 10) ?? null,
+      })),
+    })
+  }
+
+  // Map layout keys → canonical idx:name, drop any stale keys
   const canonicalLayout = layout.filter((key) =>
     allDefs.some((d) => indexWidgetKey(d.name) === key)
   )
@@ -49,9 +82,9 @@ export default async function IndexesPage() {
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Market Indexes</h1>
+        <h1 className="text-2xl font-semibold">Indexes & Charts</h1>
         <p className="text-sm text-gray-500 mt-1">
-          PIX China and TTO — used for formula-based pricing
+          Fastmarkets, PIX, RISI — latest 12 months per series
         </p>
       </div>
 
@@ -61,7 +94,7 @@ export default async function IndexesPage() {
           <IndexesCanvas initialLayout={canonicalLayout} allDefs={allDefs} />
         </div>
 
-        {/* Tools sidebar — 1/3 width, unchanged */}
+        {/* Tools sidebar — 1/3 width */}
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-2">

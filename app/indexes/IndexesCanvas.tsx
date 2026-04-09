@@ -20,10 +20,15 @@ import {
 import { CSS } from "@dnd-kit/utilities"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { addIndexWidget, removeIndexWidget, reorderIndexWidgets } from "./actions"
+import { displayNameForIndex } from "@/lib/widget-catalog"
+import IndexCharts from "./IndexCharts"
+import type { ChartGroup } from "./IndexCharts"
 
-export type IndexTableData = {
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export type IndexSeriesData = {
   id: string
-  name: string
+  name: string         // raw IndexDefinition.name
   unit: string
   values: {
     id: string
@@ -33,67 +38,34 @@ export type IndexTableData = {
   }[]
 }
 
-// ── Per-row table ─────────────────────────────────────────────────────────────
+// ── Data conversion: IndexSeriesData → ChartGroup ─────────────────────────────
 
-function IndexTable({ def }: { def: IndexTableData }) {
-  return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="text-xs text-gray-400 border-b">
-          <th className="text-left pb-2 font-medium">Month</th>
-          <th className="text-right pb-2 font-medium">Value</th>
-          <th className="text-right pb-2 font-medium">Published</th>
-          <th className="text-right pb-2 font-medium">Change</th>
-        </tr>
-      </thead>
-      <tbody>
-        {def.values.length === 0 && (
-          <tr>
-            <td colSpan={4} className="py-4 text-center text-xs text-gray-400">
-              No data
-            </td>
-          </tr>
-        )}
-        {def.values.map((v, i) => {
-          const prev = def.values[i + 1]
-          const change = prev
-            ? Math.round((v.value - prev.value) * 10) / 10
-            : null
-          return (
-            <tr key={v.id} className="border-b border-gray-50 hover:bg-gray-50">
-              <td className="py-2 font-mono text-xs">{v.month.slice(0, 7)}</td>
-              <td className="py-2 text-right font-semibold">
-                {v.value.toFixed(0)}
-              </td>
-              <td className="py-2 text-right text-gray-400 text-xs">
-                {v.publicationDate ?? "—"}
-              </td>
-              <td
-                className={`py-2 text-right text-xs font-medium ${
-                  change === null
-                    ? "text-gray-400"
-                    : change > 0
-                    ? "text-green-600"
-                    : change < 0
-                    ? "text-red-600"
-                    : "text-gray-400"
-                }`}
-              >
-                {change === null
-                  ? "—"
-                  : change > 0
-                  ? `+${change.toFixed(1)}`
-                  : change.toFixed(1)}
-              </td>
-            </tr>
-          )
-        })}
-      </tbody>
-    </table>
-  )
+/**
+ * Aggregates weekly observations to monthly averages (same logic as
+ * the charts page) and returns a single-series ChartGroup ready for IndexCharts.
+ */
+function toChartGroup(def: IndexSeriesData): ChartGroup {
+  const byMonth = new Map<string, number[]>()
+  for (const v of def.values) {
+    const m = v.month.slice(0, 7)
+    if (!byMonth.has(m)) byMonth.set(m, [])
+    byMonth.get(m)!.push(v.value)
+  }
+  const data = [...byMonth.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, vals]) => ({
+      month,
+      value: Math.round(vals.reduce((s, v) => s + v, 0) / vals.length),
+    }))
+
+  const label = displayNameForIndex(def.name)
+  return {
+    title: label,
+    series: [{ name: label, data }],
+  }
 }
 
-// ── Sortable card ─────────────────────────────────────────────────────────────
+// ── Sortable chart card ───────────────────────────────────────────────────────
 
 function SortableIndexCard({
   id,
@@ -101,7 +73,7 @@ function SortableIndexCard({
   onRemove,
 }: {
   id: string
-  def: IndexTableData
+  def: IndexSeriesData
   onRemove: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -112,6 +84,8 @@ function SortableIndexCard({
     transition,
     opacity: isDragging ? 0.5 : 1,
   }
+
+  const group = toChartGroup(def)
 
   return (
     <div ref={setNodeRef} style={style} className="relative group">
@@ -124,24 +98,31 @@ function SortableIndexCard({
       >
         <span className="text-gray-300 text-lg select-none">⠿</span>
       </div>
+
       <Card className="ml-6">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-medium">{def.name}</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {displayNameForIndex(def.name)}
+            </CardTitle>
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-400">{def.unit}</span>
               <button
                 onClick={onRemove}
                 className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-400 text-lg leading-none"
-                title={`Remove ${def.name}`}
+                title={`Remove ${displayNameForIndex(def.name)}`}
               >
                 ×
               </button>
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <IndexTable def={def} />
+        <CardContent className="pt-0">
+          {group.series[0].data.length === 0 ? (
+            <p className="text-xs text-gray-400 py-4 text-center">No data available</p>
+          ) : (
+            <IndexCharts groups={[group]} />
+          )}
         </CardContent>
       </Card>
     </div>
@@ -155,7 +136,7 @@ function AddWidgetMenu({
   activeKeys,
   onAdd,
 }: {
-  allDefs: IndexTableData[]
+  allDefs: IndexSeriesData[]
   activeKeys: string[]
   onAdd: (key: string) => void
 }) {
@@ -171,10 +152,10 @@ function AddWidgetMenu({
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1.5 bg-gray-900 text-white text-sm px-3 py-1.5 rounded-md hover:bg-gray-700 transition-colors"
       >
-        <span className="text-base leading-none">+</span> Add Index
+        <span className="text-base leading-none">+</span> Add Chart
       </button>
       {open && (
-        <div className="absolute right-0 mt-1 w-64 max-h-72 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+        <div className="absolute right-0 mt-1 w-72 max-h-80 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg z-20">
           {available.map((d) => (
             <button
               key={d.name}
@@ -182,9 +163,14 @@ function AddWidgetMenu({
                 onAdd(`idx:${d.name}`)
                 setOpen(false)
               }}
-              className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg truncate"
+              className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg border-b border-gray-50 last:border-0"
             >
-              {d.name}
+              <span className="font-medium text-gray-800">
+                {displayNameForIndex(d.name)}
+              </span>
+              {d.values.length === 0 && (
+                <span className="ml-2 text-xs text-gray-400">no data</span>
+              )}
             </button>
           ))}
         </div>
@@ -200,7 +186,7 @@ export default function IndexesCanvas({
   allDefs,
 }: {
   initialLayout: string[]
-  allDefs: IndexTableData[]
+  allDefs: IndexSeriesData[]
 }) {
   const [items, setItems] = useState(initialLayout)
   const [pending, setPending] = useState(false)
@@ -239,14 +225,14 @@ export default function IndexesCanvas({
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-medium text-gray-700">Index Data</h2>
+        <h2 className="text-sm font-medium text-gray-700">Charts</h2>
         <AddWidgetMenu allDefs={allDefs} activeKeys={items} onAdd={handleAdd} />
       </div>
 
       {items.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
-          <p className="text-sm mb-1">No indexes added</p>
-          <p className="text-xs">Use Add Index to choose what to display</p>
+          <p className="text-sm mb-1">No charts added</p>
+          <p className="text-xs">Use Add Chart to pick a series</p>
         </div>
       )}
 

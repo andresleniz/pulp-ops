@@ -18,12 +18,12 @@ export type PendingMarketTask = {
   createdAt: Date
 }
 
-/** All pending MarketTask rows across every market, newest month first. */
+/** All pending MarketTask rows across every market, newest first. */
 export async function getAllPendingTasks(): Promise<PendingMarketTask[]> {
   const tasks = await prisma.marketTask.findMany({
     where: { status: "pending" },
     include: { market: { select: { id: true, name: true } } },
-    orderBy: [{ month: "desc" }, { createdAt: "desc" }],
+    orderBy: { createdAt: "desc" },
   })
   return tasks.map((t) => ({
     id: t.id,
@@ -36,25 +36,30 @@ export async function getAllPendingTasks(): Promise<PendingMarketTask[]> {
   }))
 }
 
-export async function listMarketTasks(
-  marketId: string,
-  month: string,
-): Promise<MarketTaskRow[]> {
+/**
+ * All tasks for a market — pending and done.
+ * NOT scoped by month: a task created in any month remains visible until
+ * explicitly marked done.
+ */
+export async function listMarketTasks(marketId: string): Promise<MarketTaskRow[]> {
   return prisma.marketTask.findMany({
-    where: { marketId, month },
+    where: { marketId },
     orderBy: { createdAt: "asc" },
     select: { id: true, title: true, status: true, createdAt: true },
   })
 }
 
+/**
+ * Creates a task belonging to a market.
+ * Month is stored as metadata only and does NOT affect visibility.
+ */
 export async function createMarketTask(
   marketId: string,
-  month: string,
-  cycleId: string | null,
   title: string,
+  cycleId?: string | null,
 ): Promise<void> {
   await prisma.marketTask.create({
-    data: { marketId, month, cycleId, title },
+    data: { marketId, cycleId: cycleId ?? null, title },
   })
 }
 

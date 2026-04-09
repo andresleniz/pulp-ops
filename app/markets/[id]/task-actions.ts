@@ -6,13 +6,13 @@ import type { MarketTaskStatus } from "@prisma/client"
 
 export async function addMarketTask(formData: FormData) {
   const marketId = formData.get("marketId") as string
-  const month = formData.get("month") as string
   const cycleId = (formData.get("cycleId") as string) || null
   const title = (formData.get("title") as string).trim()
   if (!title) return
 
-  await createMarketTask(marketId, month, cycleId, title)
+  await createMarketTask(marketId, title, cycleId)
   revalidatePath(`/markets/${marketId}`)
+  revalidatePath("/")
 }
 
 export async function toggleMarketTask(
@@ -22,4 +22,5 @@ export async function toggleMarketTask(
 ) {
   await setMarketTaskStatus(taskId, newStatus)
   revalidatePath(`/markets/${marketId}`)
+  revalidatePath("/")
 }

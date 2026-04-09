@@ -1,16 +1,11 @@
 "use server"
 
-import { resolveTask, generateTasksForMonth } from "@/lib/task-engine"
+import { setMarketTaskStatus } from "@/lib/market-tasks"
 import { revalidatePath } from "next/cache"
 
-export async function resolveTaskAction(formData: FormData) {
+export async function completeTaskAction(formData: FormData) {
   const taskId = formData.get("taskId") as string
-  await resolveTask(taskId, "Andrés")
+  await setMarketTaskStatus(taskId, "done")
   revalidatePath("/tasks")
-}
-
-export async function generateTasksAction(formData: FormData) {
-  const month = formData.get("month") as string
-  await generateTasksForMonth(month)
-  revalidatePath("/tasks")
+  revalidatePath("/")
 }
