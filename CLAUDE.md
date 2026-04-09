@@ -18,7 +18,52 @@ npm run db:reset     # Full reset + reseed (destructive)
 npm run db:studio    # Open Prisma Studio GUI
 ```
 
-There is no test suite in this project.
+```bash
+# Safety tests & migrations
+npm run test:dashboard  # Verify all months show 11 markets; layout isolation
+npm run test:safety     # Regression tests: task/note persistence, layout safety, migration idempotence
+npm run migrate         # Run all pending data migrations (idempotent)
+```
+
+## Data Preservation Policy
+
+**Non-negotiable rule: future changes must never make existing user records invisible.**
+
+### What this means in practice
+
+Any change to a persistence model, query scope, or page layout that could affect data visibility **must** include one of:
+
+1. **Backward-compatible reads** — old records are still returned by the current queries without modification (preferred), OR
+2. **A registered data migration** in `lib/data-migrations.ts` that converts old records to the new shape before go-live.
+
+Silence is not acceptable. A refactor that makes existing records disappear from the UI is a data-loss bug even if the rows still exist in the database.
+
+### Scope-change rules
+
+| Model | Scope rule | File that enforces it |
+|---|---|---|
+| `MarketTask` | Market-scoped. `month` field is metadata only. **Never add a `month` filter to `listMarketTasks`.** | `lib/market-tasks.ts` |
+| `MarketNote` | Month-scoped (per-cycle). Use `getMarketNoteWithFallback()` in UI paths to surface notes even if month format changes. | `lib/market-notes.ts` |
+| `PageLayout` | Widget config only. **Must never gate dashboard market queries.** Use `getLayoutWithValidation()` to filter stale keys. | `lib/page-layout.ts`, `lib/dashboard-queries.ts` |
+| `MonthlyCycle` | Dashboard reads directly. Zero dependency on `PageLayout`. | `lib/dashboard-queries.ts` |
+
+### When adding a data migration
+
+1. Open `lib/data-migrations.ts`
+2. Add a new `Migration` object with a **stable, unique `id`** (never change after first deployment)
+3. Implement `check()` (cheap DB read) and `run()` (idempotent transformation)
+4. Append it to the `MIGRATIONS` array
+5. Test idempotence with `npm run test:safety`
+6. Trigger via `npm run migrate` or `POST /api/migrate`
+
+### Tests
+
+Run `npm run test:safety` to verify:
+- Tasks with any `month` value are returned by `listMarketTasks`
+- Notes are found by fallback read even if month doesn't match
+- Dashboard cycle counts are independent of `PageLayout`
+- Stale layout keys are filtered without hiding valid keys
+- All migrations are idempotent
 
 ## Architecture
 

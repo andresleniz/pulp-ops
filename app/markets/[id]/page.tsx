@@ -17,7 +17,7 @@ import { VolumeChart } from "@/components/markets/volume-chart"
 import { getEffectiveMonthlyPrices } from "@/lib/price-queries"
 import { getVolumeChartData } from "@/lib/volume-queries"
 import { listMarketTasks } from "@/lib/market-tasks"
-import { getMarketNote } from "@/lib/market-notes"
+import { getMarketNoteWithFallback } from "@/lib/market-notes"
 import { MarketTasksPanel } from "@/components/markets/market-tasks-panel"
 import { MarketNotesPanel } from "@/components/markets/market-notes-panel"
 
@@ -183,7 +183,9 @@ export default async function MarketDetailPage({
   // ── Market tasks & notes ─────────────────────────────────────────────────
   // Tasks are market-scoped — visible regardless of which month is selected
   const marketTasks = await listMarketTasks(market.id)
-  const marketNote = await getMarketNote(market.id, selectedMonth)
+  // getMarketNoteWithFallback ensures a note is never silently hidden if the
+  // month format changes or a note was created outside a standard cycle month.
+  const marketNote = await getMarketNoteWithFallback(market.id, selectedMonth)
 
   return (
     <div className="p-6 max-w-7xl mx-auto">

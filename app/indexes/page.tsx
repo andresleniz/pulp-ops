@@ -3,7 +3,7 @@ import { saveIndexValue, triggerRecalculate } from "./actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import IndexUploader from "./IndexUploader"
 import IndexesCanvas from "./IndexesCanvas"
-import { getLayout } from "@/lib/page-layout"
+import { getLayoutWithValidation } from "@/lib/page-layout"
 import { indexWidgetKey } from "@/lib/widget-catalog"
 import type { IndexSeriesData } from "./IndexesCanvas"
 
@@ -23,8 +23,6 @@ function trailingStartMonth(endMonthKey: string): string {
 }
 
 export default async function IndexesPage() {
-  const layout = await getLayout("indexes")
-
   // ── Fetch per-series trailing-12-month data ───────────────────────────────
   const definitions = await prisma.indexDefinition.findMany({
     orderBy: { name: "asc" },
@@ -68,10 +66,11 @@ export default async function IndexesPage() {
     })
   }
 
-  // Map layout keys → canonical idx:name, drop any stale keys
-  const canonicalLayout = layout.filter((key) =>
-    allDefs.some((d) => indexWidgetKey(d.name) === key)
-  )
+  // Build valid key set and load layout — getLayoutWithValidation filters stale
+  // keys at read time and logs a warning; the stale-layout-keys-v1 migration
+  // removes them from storage on next migration run.
+  const validKeySet = new Set(allDefs.map((d) => indexWidgetKey(d.name)))
+  const canonicalLayout = await getLayoutWithValidation("indexes", validKeySet)
 
   const dependentMarkets = await prisma.pricingRule.findMany({
     where: { method: "index_formula", isActive: true },
