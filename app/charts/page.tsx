@@ -18,7 +18,7 @@ async function buildChartGroup(
     include: {
       values: {
         where: { OR: [{ source: null }, { source: { not: "forecast" } }] },
-        orderBy: { month: "asc" },
+        orderBy: { month: "desc" },
         take: 24,
       },
     },
@@ -28,7 +28,8 @@ async function buildChartGroup(
   function toMonthlyPoints(
     values: { month: string; value: { toNumber: () => number } }[]
   ) {
-    // values already sorted asc; month can be YYYY-MM or YYYY-MM-DD
+    // values arrive desc (newest-first); output is sorted asc for chart display
+    // month can be YYYY-MM or YYYY-MM-DD
     const byMonth = new Map<string, number[]>()
     for (const v of values) {
       const m = v.month.slice(0, 7) // YYYY-MM
