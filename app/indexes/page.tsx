@@ -2,95 +2,138 @@ import { prisma } from "@/lib/prisma"
 import { saveIndexValue, triggerRecalculate } from "./actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import IndexUploader from "./IndexUploader"
-import IndexesCanvas from "./IndexesCanvas"
-import { getLayoutWithValidation } from "@/lib/page-layout"
-import { indexWidgetKey } from "@/lib/widget-catalog"
-import type { IndexSeriesData } from "./IndexesCanvas"
+import {
+  getIndexesPageSnapshotByRegion,
+  type IndexCardData,
+  type RegionSnapshot,
+} from "@/lib/indexes-queries"
 
-// ── Trailing-12-month window helper ──────────────────────────────────────────
+// ── Card component ────────────────────────────────────────────────────────────
 
-/**
- * Given a month key (YYYY-MM or YYYY-MM-DD), returns the YYYY-MM string that
- * is 11 months earlier — so [start, end] inclusive spans exactly 12 months.
- */
-function trailingStartMonth(endMonthKey: string): string {
-  const base = endMonthKey.slice(0, 7)
-  const [y, m] = base.split("-").map(Number)
-  const startM = m - 11
-  const startY = startM <= 0 ? y - 1 : y
-  const normM = startM <= 0 ? 12 + startM : startM
-  return `${startY}-${String(normM).padStart(2, "0")}`
+function statusBadge(status: IndexCardData["status"]) {
+  if (status === "current") return "bg-green-100 text-green-800"
+  if (status === "stale")   return "bg-amber-100 text-amber-800"
+  return "bg-gray-100 text-gray-500"
 }
 
-export default async function IndexesPage() {
-  // ── Fetch per-series trailing-12-month data ───────────────────────────────
-  const definitions = await prisma.indexDefinition.findMany({
-    orderBy: { name: "asc" },
-  })
-
-  const allDefs: IndexSeriesData[] = []
-
-  for (const def of definitions) {
-    // Find latest non-forecast observation to anchor the 12-month window
-    const latest = await prisma.indexValue.findFirst({
-      where: { indexId: def.id, NOT: { source: "forecast" } },
-      orderBy: { month: "desc" },
-    })
-
-    if (!latest) {
-      allDefs.push({ id: def.id, name: def.name, unit: def.unit, values: [] })
-      continue
-    }
-
-    const startMonth = trailingStartMonth(latest.month)
-
-    const values = await prisma.indexValue.findMany({
-      where: {
-        indexId: def.id,
-        NOT: { source: "forecast" },
-        month: { gte: startMonth },
-      },
-      orderBy: { month: "asc" },
-    })
-
-    allDefs.push({
-      id: def.id,
-      name: def.name,
-      unit: def.unit,
-      values: values.map((v) => ({
-        id: v.id,
-        month: v.month,
-        value: Number(v.value),
-        publicationDate: v.publicationDate?.toISOString().slice(0, 10) ?? null,
-      })),
-    })
+function IndexCard({ card }: { card: IndexCardData }) {
+  // unavailable — no FM/TTO series acquired for this concept yet.
+  // Rendered with a distinct muted style so the gap is explicit, not a broken value.
+  if (card.mappingType === "unavailable") {
+    return (
+      <Card className="bg-gray-50 border-dashed border-gray-200">
+        <CardContent className="p-4">
+          <div className="flex items-start justify-between mb-2 gap-2">
+            <p className="text-sm font-medium text-gray-400 leading-tight">{card.label}</p>
+            <span className="shrink-0 text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-400">
+              unavailable
+            </span>
+          </div>
+          <p className="text-2xl font-semibold text-gray-300">—</p>
+          <p className="text-xs text-gray-400 italic mt-1">No data source yet</p>
+          <div className="flex flex-wrap gap-1 mt-3">
+            {card.tags.map((tag) => (
+              <span key={tag} className="text-xs bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded">
+                {tag}
+              </span>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
-  // Build valid key set and load layout — getLayoutWithValidation filters stale
-  // keys at read time and logs a warning; the stale-layout-keys-v1 migration
-  // removes them from storage on next migration run.
-  const validKeySet = new Set(allDefs.map((d) => indexWidgetKey(d.name)))
-  const canonicalLayout = await getLayoutWithValidation("indexes", validKeySet)
+  return (
+    <Card className="bg-white">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between mb-2 gap-2">
+          <p className="text-sm font-medium text-gray-900 leading-tight">{card.label}</p>
+          <span
+            className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${statusBadge(card.status)}`}
+          >
+            {card.status}
+          </span>
+        </div>
 
-  const dependentMarkets = await prisma.pricingRule.findMany({
-    where: { method: "index_formula", isActive: true },
-    include: { market: true, fiber: true },
-    distinct: ["marketId", "fiberId"],
-  })
+        <p className="text-2xl font-semibold text-gray-900 tracking-tight">
+          {card.value != null ? `$${card.value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+        </p>
+
+        <div className="mt-1 space-y-0.5">
+          {card.observationDate && (
+            <p className="text-xs text-gray-400">{card.observationDate}</p>
+          )}
+          {card.source && (
+            <p className="text-xs text-gray-400">{card.source} · USD/ADT</p>
+          )}
+          {!card.observationDate && !card.source && (
+            <p className="text-xs text-gray-400 italic">No data yet</p>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-1 mt-3">
+          {card.tags.map((tag) => (
+            <span
+              key={tag}
+              className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Region section ────────────────────────────────────────────────────────────
+
+function RegionSection({ region }: { region: RegionSnapshot }) {
+  return (
+    <div className="mb-8">
+      <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+        {region.region}
+      </h2>
+      <div className="grid grid-cols-2 gap-3">
+        {region.cards.map((card) => (
+          <IndexCard key={card.label} card={card} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+export default async function IndexesPage() {
+  // Current month for snapshot window — computed server-side from UTC date
+  const currentMonth = new Date().toISOString().slice(0, 7)
+
+  const [regions, definitions, dependentMarkets] = await Promise.all([
+    getIndexesPageSnapshotByRegion(currentMonth),
+    prisma.indexDefinition.findMany({ orderBy: { name: "asc" } }),
+    prisma.pricingRule.findMany({
+      where: { method: "index_formula", isActive: true },
+      include: { market: true, fiber: true },
+      distinct: ["marketId", "fiberId"],
+    }),
+  ])
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Indexes & Charts</h1>
+        <h1 className="text-2xl font-semibold">Indexes</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Fastmarkets, PIX, RISI — latest 12 months per series
+          Fastmarkets &amp; TTO — {currentMonth}
         </p>
       </div>
 
       <div className="grid grid-cols-3 gap-6">
-        {/* Main canvas — 2/3 width */}
+        {/* Regional snapshot — 2/3 width */}
         <div className="col-span-2">
-          <IndexesCanvas initialLayout={canonicalLayout} allDefs={allDefs} />
+          {regions.map((region) => (
+            <RegionSection key={region.region} region={region} />
+          ))}
         </div>
 
         {/* Tools sidebar — 1/3 width */}
@@ -121,7 +164,7 @@ export default async function IndexesPage() {
                   <input
                     type="month"
                     name="month"
-                    defaultValue="2026-04"
+                    defaultValue={currentMonth}
                     className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
                     required
                   />
@@ -170,7 +213,7 @@ export default async function IndexesPage() {
                   <input
                     type="month"
                     name="month"
-                    defaultValue="2026-04"
+                    defaultValue={currentMonth}
                     className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
                     required
                   />
@@ -204,6 +247,9 @@ export default async function IndexesPage() {
                     </span>
                   </div>
                 ))}
+                {dependentMarkets.length === 0 && (
+                  <p className="text-xs text-gray-400">No formula rules active.</p>
+                )}
               </div>
             </CardContent>
           </Card>

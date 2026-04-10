@@ -131,7 +131,12 @@ export async function getDashboardIndexSnapshot(
       continue
     }
 
-    const nonForecastWhere = { indexId: def.id, NOT: { source: "forecast" } }
+    // Include rows where source IS NULL (legacy observed data) OR source is not 'forecast'.
+    // NOT: { source: "forecast" } alone excludes NULL in PostgreSQL, hiding older TTO rows.
+    const nonForecastWhere = {
+      indexId: def.id,
+      OR: [{ source: null }, { source: { not: "forecast" } }],
+    }
 
     // Try current-month window first (handles both YYYY-MM and YYYY-MM-DD keys)
     const current = await prisma.indexValue.findFirst({
