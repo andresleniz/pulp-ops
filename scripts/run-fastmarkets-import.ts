@@ -3,13 +3,13 @@ import crypto from "crypto"
 import { parseFastmarketsFile, storageKey } from "@/lib/fastmarkets-importer"
 import { prisma } from "@/lib/prisma"
 
-const FILE = "C:/Users/Andres Leniz/Downloads/Fastmarkets_2026_04_08-140501.xlsx"
+const FILE = "C:/Users/Andres Leniz/Downloads/Fastmarkets_2026_04_10-080034.xlsx"
 
 async function main() {
   const wb = XLSX.readFile(FILE)
   const ws = wb.Sheets[wb.SheetNames[0]]
   const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null }) as unknown[][]
-  const { series, skippedRows } = parseFastmarketsFile(rawRows, "Fastmarkets_2026_04_08-140501.xlsx")
+  const { series, skippedRows } = parseFastmarketsFile(rawRows, "Fastmarkets_2026_04_10-080034.xlsx")
 
   console.log(`Parsed ${series.length} series, ${skippedRows} skipped rows`)
 

@@ -87,18 +87,26 @@ type CardDef = {
 
 // ── Region → index config ─────────────────────────────────────────────────────
 //
-// MAPPING NOTES
-//   PIX China          ← DB "PIX China"               (FM symbol FP-PLP-0033, BHKP hardwood)
-//   TTO China BHK      ← DB "TTO China BHK"            (null-source observed data)
-//   PIX China Softwood ← DB "FM: PIX Pulp China NBSK Net"
-//   TTO Global UKP     ← DB "TTO Global UKP UKP"
-//   RISI Europe HW     ← DB "RISI Europe HW"           (FM symbol FP-PLP-0040, European BHKP benchmark → List)
-//   RISI Europe HW Spot  ← no DB series yet → missing
-//   RISI Europe Softwood List/Spot ← no DB series yet → missing
-//   TTO North America BHK ← DB "TTO North America BHK" (null-source observed)
-//   RISI USA HW        ← DB "RISI USA HW"              (FM symbol FP-PLP-0027, BHK spot US East)
-//   RISI USA HW List   ← no DB series yet → missing
-//   TTO North America NBSK/SBSK ← DB "TTO North America NBSK/SBSK"
+// MAPPING NOTES (updated 2026-04-10)
+//
+//   China
+//   PIX China Hardwood  ← DB "PIX China"                    (FM FP-PLP-0033, BHKP weekly)
+//   TTO China Hardwood  ← DB "TTO China BHK"                (null-source observed monthly)
+//   PIX China Softwood  ← DB "FM: PIX Pulp China NBSK Net"  (FM FP-PLP-0034, NBSK weekly)
+//   TTO UKP Global      ← DB "TTO Global UKP UKP"           (null-source observed monthly)
+//
+//   Europe
+//   RISI Europe HW List    ← DB "RISI Europe HW"            (FM FP-PLP-0040, BHKP benchmark weekly)
+//   RISI Europe HW Spot    ← DB "RISI Europe HW Spot"       (FM FP-PLP-0153, BEK spot fca monthly)
+//   RISI Europe Softwood Spot ← DB "RISI Europe Softwood Spot" (FM FP-PLP-0152, NBSK spot dap monthly)
+//   [Europe Softwood List not needed — FP-PLP-0039 intentionally unmapped]
+//
+//   North America
+//   TTO USA Hardwood    ← DB "TTO North America BHK"        (null-source observed monthly)
+//   RISI USA HW Spot    ← DB "RISI USA HW"                  (FM FP-PLP-0027, BHK spot US East biweekly)
+//   TTO NBSK            ← DB "TTO North America NBSK"       (null-source observed monthly)
+//   TTO SBSK            ← DB "TTO North America SBSK"       (null-source observed monthly)
+//   [FM NA softwood — FP-PLP-0023/0024 unmapped, available in DB for future use]
 
 export const INDEX_REGION_CONFIG: { region: string; cards: CardDef[] }[] = [
   {
@@ -138,8 +146,7 @@ export const INDEX_REGION_CONFIG: { region: string; cards: CardDef[] }[] = [
     region: "Europe",
     cards: [
       {
-        // FP-PLP-0040: "PIX Pulp BHKP USD — European BHKP benchmark" → list/benchmark price.
-        // Only one European HW FM series exists; it is a list/benchmark, not a spot transaction.
+        // FP-PLP-0040: PIX Pulp BHKP USD — European BHKP benchmark (list/reference price, weekly)
         label: "RISI Europe HW List",
         mappingType: "direct",
         dbName: "RISI Europe HW",
@@ -147,29 +154,21 @@ export const INDEX_REGION_CONFIG: { region: string; cards: CardDef[] }[] = [
         tags: ["Europe", "Fastmarkets", "Hardwood", "List"],
       },
       {
-        // No FM European HW spot series has been acquired. Card shown explicitly as unavailable
-        // so the gap is visible. Do not map to RISI Europe HW (that series is already List).
+        // FP-PLP-0153: BEK spot fca Europe (monthly) — confirmed 2026-04-10
         label: "RISI Europe HW Spot",
-        mappingType: "unavailable",
-        dbName: null,
+        mappingType: "direct",
+        dbName: "RISI Europe HW Spot",
         publisher: "Fastmarkets",
         tags: ["Europe", "Fastmarkets", "Hardwood", "Spot"],
       },
       {
-        // No FM European softwood series has been acquired.
-        label: "RISI Europe Softwood List",
-        mappingType: "unavailable",
-        dbName: null,
-        publisher: "Fastmarkets",
-        tags: ["Europe", "Fastmarkets", "Softwood", "List"],
-      },
-      {
-        // No FM European softwood series has been acquired.
+        // FP-PLP-0152: NBSK spot dap Europe (monthly) — confirmed 2026-04-10
+        // Europe Softwood List not needed (FP-PLP-0039 intentionally excluded).
         label: "RISI Europe Softwood Spot",
-        mappingType: "unavailable",
-        dbName: null,
+        mappingType: "direct",
+        dbName: "RISI Europe Softwood Spot",
         publisher: "Fastmarkets",
-        tags: ["Europe", "Fastmarkets", "Softwood", "Spot"],
+        tags: ["Europe", "Fastmarkets", "Softwood", "NBSK", "Spot"],
       },
     ],
   },
@@ -190,16 +189,6 @@ export const INDEX_REGION_CONFIG: { region: string; cards: CardDef[] }[] = [
         dbName: "RISI USA HW",
         publisher: "Fastmarkets",
         tags: ["North America", "Fastmarkets", "Hardwood", "Spot"],
-      },
-      {
-        // No FM USA HW list/benchmark series has been acquired.
-        // FM: "bleached hardwood kraft, eucalyptus, Brazil→US East" is NOT the same
-        // concept — it is a specific origin route, not a USA market benchmark.
-        label: "RISI USA HW List",
-        mappingType: "unavailable",
-        dbName: null,
-        publisher: "Fastmarkets",
-        tags: ["North America", "Fastmarkets", "Hardwood", "List"],
       },
       {
         label: "TTO NBSK",

@@ -43,13 +43,17 @@
  * Extend this table whenever a new series is needed on a dashboard card.
  */
 export const SYMBOL_NAME_MAP: Record<string, string> = {
-  "FP-PLP-0033": "PIX China",      // PIX Pulp China BHKP Net
-  "FP-PLP-0027": "RISI USA HW",    // BHK spot price, delivered US East
-  "FP-PLP-0040": "RISI Europe HW", // PIX Pulp BHKP USD — European BHKP benchmark
-  // Add future series here as they become available:
-  // "FP-PLP-XXXX": "RISI USA HW spot",
-  // "FP-PLP-XXXX": "TTO Softwood",
-  // "FP-PLP-XXXX": "RISI USA Softwood spot",
+  // ── China ──────────────────────────────────────────────────────────────────
+  "FP-PLP-0033": "PIX China",                  // PIX Pulp China BHKP Net → hardwood
+  "FP-PLP-0034": "FM: PIX Pulp China NBSK Net", // PIX Pulp China NBSK Net → softwood (existing DB name)
+
+  // ── Europe ─────────────────────────────────────────────────────────────────
+  "FP-PLP-0040": "RISI Europe HW",              // PIX Pulp BHKP USD — European BHKP benchmark (list)
+  "FP-PLP-0153": "RISI Europe HW Spot",         // BEK spot fca Europe
+  "FP-PLP-0152": "RISI Europe Softwood Spot",   // NBSK spot dap Europe
+
+  // ── North America ──────────────────────────────────────────────────────────
+  "FP-PLP-0027": "RISI USA HW",                 // BHK spot price, delivered US East
 }
 
 export function normalizeFastmarketsName(
