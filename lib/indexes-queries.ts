@@ -99,6 +99,8 @@ type CardDef = {
 //   RISI Europe HW List    ← DB "RISI Europe HW"            (FM FP-PLP-0040, BHKP benchmark weekly)
 //   RISI Europe HW Spot    ← DB "RISI Europe HW Spot"       (FM FP-PLP-0153, BEK spot fca monthly)
 //   RISI Europe Softwood Spot ← DB "RISI Europe Softwood Spot" (FM FP-PLP-0152, NBSK spot dap monthly)
+//   TTO Europe HW          ← DB "TTO Europe BHK"            (null-source observed monthly)
+//   TTO Europe NBSK        ← DB "TTO Europe NBSK"           (null-source observed monthly)
 //   [Europe Softwood List not needed — FP-PLP-0039 intentionally unmapped]
 //
 //   North America
@@ -169,6 +171,20 @@ export const INDEX_REGION_CONFIG: { region: string; cards: CardDef[] }[] = [
         dbName: "RISI Europe Softwood Spot",
         publisher: "Fastmarkets",
         tags: ["Europe", "Fastmarkets", "Softwood", "NBSK", "Spot"],
+      },
+      {
+        label: "TTO Europe HW",
+        mappingType: "direct",
+        dbName: "TTO Europe BHK",
+        publisher: "TTO",
+        tags: ["Europe", "TTO", "Hardwood"],
+      },
+      {
+        label: "TTO Europe NBSK",
+        mappingType: "direct",
+        dbName: "TTO Europe NBSK",
+        publisher: "TTO",
+        tags: ["Europe", "TTO", "Softwood", "NBSK"],
       },
     ],
   },

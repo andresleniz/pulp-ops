@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useCallback } from "react"
 import {
   LineChart,
   Line,
@@ -20,6 +21,7 @@ const SERIES_COLORS = [
   "#d97706", // amber
   "#7c3aed", // purple
   "#0891b2", // cyan
+  "#be185d", // pink
 ]
 
 const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
@@ -47,12 +49,73 @@ function deriveQuarterTicks(dates: string[]): string[] {
   })
 }
 
+// ── Custom legend with click-to-highlight ────────────────────────────────────
+
+type LegendPayloadItem = {
+  value: string
+  color: string
+  type?: string
+}
+
+function ClickableLegend({
+  payload,
+  activeSeries,
+  onToggle,
+}: {
+  payload?: LegendPayloadItem[]
+  activeSeries: string | null
+  onToggle: (label: string) => void
+}) {
+  if (!payload?.length) return null
+  return (
+    <ul className="flex flex-wrap gap-x-4 gap-y-1 justify-center pt-2 list-none m-0 p-0">
+      {payload.map((entry) => {
+        const isActive = activeSeries === null || activeSeries === entry.value
+        return (
+          <li
+            key={entry.value}
+            onClick={() => onToggle(entry.value)}
+            className="flex items-center gap-1.5 cursor-pointer select-none"
+            style={{ opacity: isActive ? 1 : 0.3 }}
+          >
+            {/* plainline icon */}
+            <svg width="16" height="3" aria-hidden>
+              <line
+                x1="0" y1="1.5" x2="16" y2="1.5"
+                stroke={entry.color}
+                strokeWidth={activeSeries === entry.value ? 3 : 1.75}
+              />
+            </svg>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: activeSeries === entry.value ? 600 : 400,
+                color: activeSeries === entry.value ? entry.color : "#6b7280",
+              }}
+            >
+              {entry.value}
+            </span>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+// ── Main chart component ──────────────────────────────────────────────────────
+
 export default function RegionalIndexChart({ region }: { region: RegionalChartData }) {
-  const activeSeries = region.series.filter((s) => s.hasData)
+  const [activeSeries, setActiveSeries] = useState<string | null>(null)
+
+  const handleToggle = useCallback((label: string) => {
+    setActiveSeries((prev) => (prev === label ? null : label))
+  }, [])
+
+  const activeSeries_ = region.series.filter((s) => s.hasData)
 
   // Merge all date keys across active series into a sorted deduplicated array
   const dateSet = new Set<string>()
-  for (const s of activeSeries) {
+  for (const s of activeSeries_) {
     s.points.forEach((p) => dateSet.add(p.date))
   }
   const dates = [...dateSet].sort()
@@ -61,7 +124,7 @@ export default function RegionalIndexChart({ region }: { region: RegionalChartDa
   // Build flat chart data: { date, "Series Label": value?, ... }
   const chartData = dates.map((date) => {
     const row: Record<string, string | number> = { date }
-    for (const s of activeSeries) {
+    for (const s of activeSeries_) {
       const point = s.points.find((p) => p.date === date)
       if (point != null) row[s.label] = point.value
     }
@@ -84,11 +147,19 @@ export default function RegionalIndexChart({ region }: { region: RegionalChartDa
         </div>
       </CardHeader>
       <CardContent className="pt-2">
-        {activeSeries.length === 0 ? (
+        {activeSeries_.length === 0 ? (
           <p className="text-sm text-gray-400 italic py-6">No observed data in this window.</p>
         ) : (
           <ResponsiveContainer width="100%" height={270}>
-            <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+            <LineChart
+              data={chartData}
+              margin={{ top: 4, right: 16, left: 0, bottom: 0 }}
+              onClick={(payload: any) => {
+                // Click on chart canvas: toggle the nearest series via activePayload
+                const activeLabel = payload?.activePayload?.[0]?.name as string | undefined
+                if (activeLabel) handleToggle(activeLabel)
+              }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
               <XAxis
                 dataKey="date"
@@ -120,21 +191,39 @@ export default function RegionalIndexChart({ region }: { region: RegionalChartDa
               />
               <Legend
                 wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
-                iconType="plainline"
-                iconSize={16}
+                content={
+                  <ClickableLegend
+                    activeSeries={activeSeries}
+                    onToggle={handleToggle}
+                  />
+                }
               />
-              {activeSeries.map((s, i) => (
-                <Line
-                  key={s.label}
-                  type="monotone"
-                  dataKey={s.label}
-                  stroke={SERIES_COLORS[i % SERIES_COLORS.length]}
-                  strokeWidth={1.75}
-                  dot={false}
-                  activeDot={{ r: 3, strokeWidth: 0 }}
-                  connectNulls
-                />
-              ))}
+              {activeSeries_.map((s, i) => {
+                const color = SERIES_COLORS[i % SERIES_COLORS.length]
+                const isActive = activeSeries === null || activeSeries === s.label
+                return (
+                  <Line
+                    key={s.label}
+                    type="monotone"
+                    dataKey={s.label}
+                    stroke={color}
+                    strokeWidth={activeSeries === s.label ? 2.5 : 1.75}
+                    strokeOpacity={isActive ? 1 : 0.15}
+                    dot={false}
+                    activeDot={
+                      isActive
+                        ? {
+                            r: 3,
+                            strokeWidth: 0,
+                            onClick: () => handleToggle(s.label),
+                          }
+                        : false
+                    }
+                    connectNulls
+                    style={{ cursor: "pointer" }}
+                  />
+                )
+              })}
             </LineChart>
           </ResponsiveContainer>
         )}
