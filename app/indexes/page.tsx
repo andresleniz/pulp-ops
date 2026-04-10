@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { saveIndexValue, triggerRecalculate } from "./actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -121,11 +122,19 @@ export default async function IndexesPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Indexes</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Fastmarkets &amp; TTO — {currentMonth}
-        </p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Indexes</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Fastmarkets &amp; TTO — {currentMonth}
+          </p>
+        </div>
+        <Link
+          href="/indexes/charts"
+          className="text-sm text-blue-600 hover:underline"
+        >
+          Historical charts →
+        </Link>
       </div>
 
       <div className="grid grid-cols-3 gap-6">
