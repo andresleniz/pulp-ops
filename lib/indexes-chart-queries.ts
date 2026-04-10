@@ -4,8 +4,8 @@
  * Centralised data layer for the regional historical index charts page.
  *
  * OWNERSHIP
- *   - getRegionalHistoricalCharts()  fetches observed series data for all
- *     three regions, bounded to a rolling 24-month window.
+ *   - getRegionalHistoricalCharts(currentMonth)  fetches observed series data
+ *     for all three regions, bounded to a fixed 24-month rolling window.
  *   - Region → series mapping is sourced directly from INDEX_REGION_CONFIG
  *     in lib/indexes-queries.ts.  No duplicate mapping exists here.
  *
@@ -14,19 +14,19 @@
  *   - Fastmarkets rows:    source = 'Fastmarkets'
  *   - TTO observed rows:   source IS NULL  (legacy, pre-stamp)
  *   - Forecast rows:       excluded entirely (never shown in historical chart)
- *   - Future-dated rows:   not included (window ends at latest observed)
+ *   - Future-dated rows:   excluded (window ends at currentMonth)
  *
  * WINDOW LOGIC
- *   1. Find the latest non-forecast observation across all series in a region.
- *      This is the chart endpoint.
- *   2. Go back exactly 24 months from that endpoint's calendar month.
- *      This is the chart start date.
- *   3. Fetch every observed point for each series within [startDate, endpoint].
+ *   Fixed 24-month calendar window anchored to the caller-supplied currentMonth:
+ *     startDate  = currentMonth − 24 calendar months  (e.g. 2024-04 for 2026-04)
+ *     endpoint   = currentMonth                        (e.g. 2026-04)
+ *   All three regions use the same window — no per-region shift.
+ *   Series may have gaps inside the frame; they are returned as absent (not null).
  *
  * RAW DATES PRESERVED
  *   Weekly series remain YYYY-MM-DD precision.
  *   Monthly series remain YYYY-MM precision.
- *   No resampling is applied.  Missing points are returned as absent (not null).
+ *   No resampling is applied.
  */
 
 import { prisma } from "@/lib/prisma"
@@ -48,9 +48,9 @@ export type ChartSeriesData = {
 
 export type RegionalChartData = {
   region: string
-  /** Latest non-forecast observation date across all series in this region. */
+  /** Calendar month anchor supplied by the caller (YYYY-MM). */
   endpoint: string
-  /** 24 calendar months before the endpoint month (YYYY-MM). */
+  /** 24 calendar months before the endpoint (YYYY-MM). */
   startDate: string
   series: ChartSeriesData[]
 }
@@ -76,16 +76,27 @@ function subtractMonths(yyyyMM: string, n: number): string {
   return `${ny}-${String(nm).padStart(2, "0")}`
 }
 
+/** YYYY-MM → the first day of the following month (YYYY-MM) */
+function nextMonthStr(yyyyMM: string): string {
+  const [y, m] = yyyyMM.split("-").map(Number)
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`
+}
+
 // ── Main query ────────────────────────────────────────────────────────────────
 
 /**
  * Returns 24-month observed chart data for all three regions.
  *
- * Uses INDEX_REGION_CONFIG as the single source of truth for which series
- * belong to each region.  Only `direct` mappings with a valid dbName are
- * included (unavailable cards are silently skipped — they have no data).
+ * The window is fixed: [currentMonth − 24 months, currentMonth].
+ * All three regions use the same window regardless of data availability.
+ *
+ * @param currentMonth  YYYY-MM string — today's calendar month.
  */
-export async function getRegionalHistoricalCharts(): Promise<RegionalChartData[]> {
+export async function getRegionalHistoricalCharts(
+  currentMonth: string
+): Promise<RegionalChartData[]> {
+  const startDate  = subtractMonths(currentMonth, 24)
+  const upperBound = nextMonthStr(currentMonth)   // exclusive upper bound for weekly keys
   const results: RegionalChartData[] = []
 
   for (const regionDef of INDEX_REGION_CONFIG) {
@@ -101,31 +112,7 @@ export async function getRegionalHistoricalCharts(): Promise<RegionalChartData[]
     })
     const defMap = new Map(defs.map((d) => [d.name, d.id]))
 
-    // Find the latest non-forecast observation across ALL series in this region
-    const indexIds = [...defMap.values()]
-    if (indexIds.length === 0) {
-      results.push({ region: regionDef.region, endpoint: "", startDate: "", series: [] })
-      continue
-    }
-
-    const latestRow = await prisma.indexValue.findFirst({
-      where: {
-        indexId: { in: indexIds },
-        OR: [{ source: null }, { source: { not: "forecast" } }],
-      },
-      orderBy: { month: "desc" },
-      select: { month: true },
-    })
-
-    if (!latestRow) {
-      results.push({ region: regionDef.region, endpoint: "", startDate: "", series: [] })
-      continue
-    }
-
-    const endpoint = latestRow.month
-    const startDate = subtractMonths(endpoint.slice(0, 7), 24)
-
-    // Fetch each series within the 24-month window
+    // Fetch each series within the fixed 24-month window
     const series: ChartSeriesData[] = []
     for (const card of directCards) {
       const indexId = defMap.get(card.dbName!)
@@ -137,7 +124,7 @@ export async function getRegionalHistoricalCharts(): Promise<RegionalChartData[]
       const rows = await prisma.indexValue.findMany({
         where: {
           ...observedWhere(indexId),
-          month: { gte: startDate },
+          month: { gte: startDate, lt: upperBound },
         },
         orderBy: { month: "asc" },
         select: { month: true, value: true },
@@ -154,7 +141,7 @@ export async function getRegionalHistoricalCharts(): Promise<RegionalChartData[]
       })
     }
 
-    results.push({ region: regionDef.region, endpoint, startDate, series })
+    results.push({ region: regionDef.region, endpoint: currentMonth, startDate, series })
   }
 
   return results

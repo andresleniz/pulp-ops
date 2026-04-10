@@ -14,7 +14,8 @@ const nav = [
   },
   {
     label: "Pricing", items: [
-      { href: "/indexes", label: "Indexes & Charts", icon: "≡" },
+      { href: "/pricing/indexes", label: "Indexes", icon: "≡" },
+      { href: "/pricing/charts",  label: "Charts",  icon: "∿" },
     ]
   },
   {
