@@ -29,7 +29,8 @@ async function main() {
     console.log(`Created ${missing.length} new IndexDefinition(s): ${missing.join(", ")}`)
   }
 
-  // Cleanup: remove old monthly-grain (YYYY-MM, 7-char) Fastmarkets rows in chunks
+  // Cleanup step 1: remove old monthly-grain (YYYY-MM, 7-char) Fastmarkets rows in chunks.
+  // These are pre-weekly-grain rows created before storageKey() switched to YYYY-MM-DD.
   const affectedIds = allNames.map(n => nameToId.get(n)).filter(Boolean) as string[]
   const DELETE_CHUNK = 500
   let totalDeleted = 0
@@ -44,7 +45,26 @@ async function main() {
     )
     totalDeleted += deleted
   }
-  console.log(`Cleaned up ${totalDeleted} old monthly-grain rows`)
+  console.log(`Cleaned up ${totalDeleted} old monthly-grain Fastmarkets rows`)
+
+  // Cleanup step 2: remove any null-source rows for Fastmarkets-mapped indexes.
+  // Null-source rows are reserved for TTO observed data.  A Fastmarkets-mapped
+  // IndexDefinition must never carry null-source rows — if any exist they are stale
+  // manual imports and will corrupt the chart by mixing two different series.
+  let nullDeleted = 0
+  for (let i = 0; i < affectedIds.length; i += DELETE_CHUNK) {
+    const chunk = affectedIds.slice(i, i + DELETE_CHUNK)
+    const deleted = await prisma.$executeRawUnsafe(
+      `DELETE FROM "IndexValue"
+       WHERE source IS NULL
+         AND "indexId" = ANY($1::text[])`,
+      chunk
+    )
+    nullDeleted += deleted
+  }
+  if (nullDeleted > 0) {
+    console.log(`WARNING: removed ${nullDeleted} stale null-source rows from Fastmarkets-mapped indexes`)
+  }
 
   // Build upsert rows with dedup: keyed by (indexId, storageKey)
   // Winner = latest publicationDate when two obs collide on the same key
