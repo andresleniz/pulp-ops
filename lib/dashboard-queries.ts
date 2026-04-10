@@ -6,12 +6,8 @@
  *   - sortByDisplayOrder()   sort any array of objects with market.name
  *   - getDashboardIndexSnapshot()  five required hardwood index values
  *
- * IMPORTANT — layout system isolation:
- *   The dashboard market grid MUST query MonthlyCycle directly.
- *   It MUST NOT use PageLayout / getLayout() to decide which markets to show.
- *   PageLayout is solely for the Charts and Indexes pages (user-configurable
- *   widget canvases).  If it were accidentally applied here, months with no
- *   configured widgets would render 0 market cards.
+ * IMPORTANT — the dashboard market grid queries MonthlyCycle directly.
+ *   It must never be gated by any layout or widget configuration.
  */
 
 import { prisma } from "@/lib/prisma"

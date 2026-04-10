@@ -14,9 +14,7 @@
  * 1. Every migration is IDEMPOTENT — running it twice is safe.
  * 2. Every migration is NON-DESTRUCTIVE — existing user records are never
  *    deleted.  If a record no longer fits the current model, it is moved or
- *    updated, never dropped.  The only exception is stale UI configuration
- *    (e.g. PageLayout entries pointing to deleted index series) which is
- *    metadata, not user-entered data.
+ *    updated, never dropped.
  * 3. Every migration is LOGGED — completion is recorded in AuditLog so the
  *    system can detect "already ran" without a separate migration table.
  * 4. Migrations run in registration order.  Later migrations may depend on
@@ -92,64 +90,6 @@ async function logMigration(id: string, detail: string): Promise<void> {
 }
 
 // ── Migration registry ────────────────────────────────────────────────────────
-
-/**
- * MIGRATION: stale-layout-keys-v1
- *
- * WHY: When an IndexDefinition is renamed or removed, existing PageLayout rows
- * that reference the old key become orphans.  IndexesCanvas silently skips
- * them (safe), but they accumulate and clutter the layout.  This migration
- * removes layout entries whose widgetKey doesn't match any live definition.
- *
- * SAFE because: PageLayout is UI configuration, not user-entered data.  Stale
- * entries cannot be displayed and serve no purpose.
- */
-const staleLayoutKeysV1: Migration = {
-  id: "stale-layout-keys-v1",
-
-  description:
-    "Remove PageLayout entries whose widgetKey references a non-existent IndexDefinition",
-
-  async check() {
-    // Fast-path: if already logged as applied today, skip re-check
-    // (run daily at most — layout rarely changes)
-    const defs = await prisma.indexDefinition.findMany({ select: { name: true } })
-    const validKeys = new Set(defs.map((d) => `idx:${d.name}`))
-
-    const layoutRows = await prisma.pageLayout.findMany({ where: { page: "indexes" } })
-    return layoutRows.some((r) => !validKeys.has(r.widgetKey))
-  },
-
-  async run() {
-    const defs = await prisma.indexDefinition.findMany({ select: { name: true } })
-    const validKeys = new Set(defs.map((d) => `idx:${d.name}`))
-
-    const layoutRows = await prisma.pageLayout.findMany({ where: { page: "indexes" } })
-    const staleKeys = layoutRows.map((r) => r.widgetKey).filter((k) => !validKeys.has(k))
-
-    if (staleKeys.length === 0) return
-
-    for (const key of staleKeys) {
-      await prisma.pageLayout.deleteMany({ where: { page: "indexes", widgetKey: key } })
-    }
-
-    // Compact positions after deletion
-    const remaining = await prisma.pageLayout.findMany({
-      where: { page: "indexes" },
-      orderBy: { position: "asc" },
-    })
-    await Promise.all(
-      remaining.map((r, i) =>
-        prisma.pageLayout.update({ where: { id: r.id }, data: { position: i } })
-      )
-    )
-
-    await logMigration(
-      staleLayoutKeysV1.id,
-      `Removed ${staleKeys.length} stale layout key(s): ${staleKeys.join(", ")}`
-    )
-  },
-}
 
 /**
  * MIGRATION: tasks-market-scope-v1
@@ -230,7 +170,6 @@ const notesMonthScopeV1: Migration = {
 const MIGRATIONS: Migration[] = [
   tasksMarketScopeV1,
   notesMonthScopeV1,
-  staleLayoutKeysV1,
 ]
 
 // ── Runner ────────────────────────────────────────────────────────────────────

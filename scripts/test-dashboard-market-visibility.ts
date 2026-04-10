@@ -1,17 +1,14 @@
 /**
  * test-dashboard-market-visibility.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Regression guard: proves that dashboard market cards are independent of
- * the PageLayout / widget-canvas state.
+ * Regression guard: proves that dashboard market cards are returned correctly
+ * for every month that has cycles.
  *
  * Run with: npm run test:dashboard
  *
  * What it tests:
  *   1. For every month that has cycles, the dashboard query returns all
  *      expected markets (MARKET_DISPLAY_ORDER list).
- *   2. Re-runs the same check with the PageLayout table fully cleared,
- *      proving market visibility is NOT gated by widget configuration.
- *   3. Restores the original PageLayout rows after the test.
  *
  * Failure means either the data is missing cycles or the query path has
  * been accidentally wired to the layout system.
@@ -74,8 +71,6 @@ async function main() {
     return
   }
 
-  // ── Pass 1: normal state ──────────────────────────────────────────────────
-  console.log("Pass 1 — with current PageLayout state:")
   for (const month of months) {
     const cycles = await fetchCyclesForMonth(month)
     assertAllMarketsPresent(month, cycles)
@@ -83,31 +78,6 @@ async function main() {
     console.log(
       `  ${month}: ${cycles.length} markets ✓  (India: ${indiaPresent ? "present" : "MISSING"})`
     )
-  }
-
-  // ── Pass 2: empty PageLayout (simulates first-load / no widgets configured) ─
-  console.log("\nPass 2 — with PageLayout cleared (worst-case widget state):")
-  const savedLayout = await prisma.pageLayout.findMany()
-  await prisma.pageLayout.deleteMany()
-
-  try {
-    for (const month of months) {
-      const cycles = await fetchCyclesForMonth(month)
-      assertAllMarketsPresent(month, cycles)
-      console.log(`  ${month}: ${cycles.length} markets ✓  (layout-independent)`)
-    }
-  } finally {
-    // Restore original layout rows
-    if (savedLayout.length > 0) {
-      await prisma.pageLayout.createMany({
-        data: savedLayout.map((r) => ({
-          page: r.page,
-          widgetKey: r.widgetKey,
-          position: r.position,
-        })),
-        skipDuplicates: true,
-      })
-    }
   }
 
   await prisma.$disconnect()

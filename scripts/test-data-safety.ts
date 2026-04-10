@@ -16,15 +16,11 @@
  *      getMarketNoteWithFallback()
  *    - A note with month=null is surfaced by the fallback path
  *
- * C. Dashboard / layout isolation
- *    - MonthlyCycle count is NOT affected by PageLayout content
- *    - Adding/clearing PageLayout does not change market visibility
+ * C. Dashboard cycle counts
+ *    - Each active month has exactly 11 market cycles
+ *    - India market is present in all test months
  *
- * D. Silent empty-state regression
- *    - A stale PageLayout key does not cause IndexesCanvas to show empty state
- *    - getLayoutWithValidation filters stale keys and still returns valid keys
- *
- * E. Migration idempotence
+ * D. Migration idempotence
  *    - runPendingMigrations() can be called multiple times without errors or
  *      duplicate log entries
  *
@@ -35,7 +31,6 @@
 import { prisma } from "@/lib/prisma"
 import { listMarketTasks, createMarketTask, setMarketTaskStatus } from "@/lib/market-tasks"
 import { getMarketNote, getMarketNoteWithFallback, upsertMarketNote } from "@/lib/market-notes"
-import { getLayoutWithValidation, addWidget, removeWidget } from "@/lib/page-layout"
 import { runPendingMigrations } from "@/lib/data-migrations"
 
 // ── Test harness ─────────────────────────────────────────────────────────────
@@ -163,43 +158,22 @@ async function testNotesPersistence() {
   }
 }
 
-// ── Test C: Dashboard / layout isolation ─────────────────────────────────────
+// ── Test C: Dashboard cycle counts ───────────────────────────────────────────
 
 async function testDashboardIsolation() {
-  console.log("\n[C] Dashboard / layout isolation")
+  console.log("\n[C] Dashboard cycle counts")
 
-  // C1. Count cycles across multiple months — must not depend on PageLayout
   const months = ["2026-02", "2026-03", "2026-04", "2026-05"]
-  const countsBefore: Record<string, number> = {}
 
-  for (const m of months) {
-    const count = await prisma.monthlyCycle.count({ where: { month: { startsWith: m } } })
-    countsBefore[m] = count
-  }
-
-  // C2. Clear all PageLayout entries
-  const backupLayout = await prisma.pageLayout.findMany()
-  await prisma.pageLayout.deleteMany({})
-
-  // C3. Re-count cycles — must be identical
-  let isolationPassed = true
-  for (const m of months) {
-    const count = await prisma.monthlyCycle.count({ where: { month: { startsWith: m } } })
-    if (count !== countsBefore[m]) {
-      isolationPassed = false
-    }
-  }
-  assert(isolationPassed, "Cycle counts are identical before and after clearing PageLayout")
-
-  // C4. Each month has exactly 11 markets
+  // C1. Each test month must have exactly 11 market cycles
   let allEleven = true
   for (const m of months) {
     const count = await prisma.monthlyCycle.count({ where: { month: { startsWith: m } } })
     if (count !== 11) allEleven = false
   }
-  assert(allEleven, "All test months have exactly 11 markets regardless of layout state")
+  assert(allEleven, "All test months have exactly 11 markets")
 
-  // C5. India is present in all months
+  // C2. India is present in all months
   const india = await prisma.market.findFirst({ where: { name: "India" } })
   if (india) {
     let indiaInAll = true
@@ -209,66 +183,14 @@ async function testDashboardIsolation() {
       })
       if (c !== 1) indiaInAll = false
     }
-    assert(indiaInAll, "India market visible in all 4 test months regardless of layout state")
-  }
-
-  // Restore layout
-  for (const row of backupLayout) {
-    await prisma.pageLayout.upsert({
-      where: { page_widgetKey: { page: row.page as any, widgetKey: row.widgetKey } },
-      create: { page: row.page, widgetKey: row.widgetKey, position: row.position },
-      update: { position: row.position },
-    })
+    assert(indiaInAll, "India market present in all 4 test months")
   }
 }
 
-// ── Test D: Silent empty-state regression (layout stale key handling) ─────────
-
-async function testLayoutStaleKeys() {
-  console.log("\n[D] Silent empty-state — stale layout key handling")
-
-  const STALE_KEY = "idx:__nonexistent_index_for_test__"
-  const VALID_DEF = await prisma.indexDefinition.findFirst({ select: { name: true } })
-
-  try {
-    // D1. Insert a stale key into PageLayout
-    await addWidget("indexes", STALE_KEY)
-
-    // D2. getLayoutWithValidation with the stale key in valid set returns it
-    const withStaleInValid = await getLayoutWithValidation("indexes", new Set([STALE_KEY]))
-    assert(
-      withStaleInValid.includes(STALE_KEY),
-      "getLayoutWithValidation returns key when it IS in validKeys"
-    )
-
-    // D3. getLayoutWithValidation without the stale key in valid set filters it out
-    const validKeys = VALID_DEF ? new Set([`idx:${VALID_DEF.name}`]) : new Set<string>()
-    const filtered = await getLayoutWithValidation("indexes", validKeys)
-    assert(
-      !filtered.includes(STALE_KEY),
-      "getLayoutWithValidation filters out stale key not in validKeys"
-    )
-
-    // D4. A valid key that IS in storage is still returned after filtering
-    if (VALID_DEF) {
-      await addWidget("indexes", `idx:${VALID_DEF.name}`)
-      const withValid = await getLayoutWithValidation("indexes", new Set([`idx:${VALID_DEF.name}`]))
-      // Result may or may not include the valid key depending on whether it was
-      // already in the layout before — just confirm the stale key is absent
-      assert(
-        !withValid.includes(STALE_KEY),
-        "Valid layout does not include stale key after filtering"
-      )
-    }
-  } finally {
-    await removeWidget("indexes", STALE_KEY)
-  }
-}
-
-// ── Test E: Migration idempotence ─────────────────────────────────────────────
+// ── Test D: Migration idempotence ────────────────────────────────────────────
 
 async function testMigrationIdempotence() {
-  console.log("\n[E] Migration idempotence")
+  console.log("\n[D] Migration idempotence")
 
   // E1. First run
   const results1 = await runPendingMigrations()
@@ -280,10 +202,9 @@ async function testMigrationIdempotence() {
   const failed2 = results2.filter((r) => r.status === "failed")
   assert(failed2.length === 0, "Second migration run has no failures")
 
-  // E3. No migration should be applied twice
+  // D3. No migration should be applied twice
   // After first run, check-based migrations should return skipped on second run
-  // (The stale-layout-keys migration is state-based, so it re-checks live data.
-  //  The scope-documentation migrations use hasMigrationLog and should be skipped.)
+  // (Scope-documentation migrations use hasMigrationLog and should be skipped.)
   const scopeMigrations = results2.filter(
     (r) => r.id === "tasks-market-scope-v1" || r.id === "notes-month-scope-v1"
   )
@@ -304,7 +225,6 @@ async function main() {
   await testTaskPersistence()
   await testNotesPersistence()
   await testDashboardIsolation()
-  await testLayoutStaleKeys()
   await testMigrationIdempotence()
 
   console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`)
