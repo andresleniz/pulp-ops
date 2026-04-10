@@ -5,24 +5,6 @@ import { logAudit } from "@/lib/audit"
 import { recalculateMonth } from "@/lib/pricing-engine"
 import { revalidatePath } from "next/cache"
 import Decimal from "decimal.js"
-import { addWidget, removeWidget, reorderWidgets } from "@/lib/page-layout"
-
-// ── Layout actions ────────────────────────────────────────────────────────────
-
-export async function addIndexWidget(key: string) {
-  await addWidget("indexes", key)
-  revalidatePath("/indexes")
-}
-
-export async function removeIndexWidget(key: string) {
-  await removeWidget("indexes", key)
-  revalidatePath("/indexes")
-}
-
-export async function reorderIndexWidgets(keys: string[]) {
-  await reorderWidgets("indexes", keys)
-  revalidatePath("/indexes")
-}
 
 export async function saveIndexValue(formData: FormData) {
   const indexId = formData.get("indexId") as string
