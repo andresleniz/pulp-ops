@@ -2,8 +2,6 @@ import { prisma } from "@/lib/prisma"
 import { addNegotiationEntry } from "./actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
-const CURRENT_MONTH = "2026-03"
-
 const statusStyle: Record<string, string> = {
   open: "bg-gray-100 text-gray-600",
   agreed: "bg-green-100 text-green-700",
@@ -13,6 +11,8 @@ const statusStyle: Record<string, string> = {
 }
 
 export default async function NegotiationsPage() {
+  const currentMonth = new Date().toISOString().slice(0, 7)
+
   const [events, markets, fibers] = await Promise.all([
     prisma.negotiationEvent.findMany({
       include: { market: true, fiber: true, customer: true },
@@ -141,7 +141,7 @@ export default async function NegotiationsPage() {
                   <input
                     type="month"
                     name="month"
-                    defaultValue={CURRENT_MONTH}
+                    defaultValue={currentMonth}
                     className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
                     required
                   />
