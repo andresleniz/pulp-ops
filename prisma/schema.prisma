@@ -215,7 +215,6 @@ model MonthlyCycle {
   monthlyPrices        MonthlyPrice[]
   negotiations         NegotiationEvent[]
   orders               OrderRecord[]
-  snapshot             Snapshot?
   tasks                Task[]
   marketTasks          MarketTask[]
   marketNotes          MarketNote[]
@@ -374,17 +373,6 @@ model AuditLog {
 
   @@index([entity, entityId])
   @@index([changedAt])
-}
-
-model Snapshot {
-  id        String       @id @default(cuid())
-  cycleId   String       @unique
-  month     String
-  marketId  String
-  payload   Json
-  createdAt DateTime     @default(now())
-  createdBy String       @default("system")
-  cycle     MonthlyCycle @relation(fields: [cycleId], references: [id])
 }
 
 enum AdjustmentType {

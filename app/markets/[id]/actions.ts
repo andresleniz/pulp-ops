@@ -65,22 +65,6 @@ export async function applyPriceOverride(formData: FormData) {
   revalidatePath(`/markets/${cycle?.market.id}`)
 }
 
-export async function closeMonth(cycleId: string) {
-  const snapshotService = await import("@/lib/snapshot")
-  await snapshotService.default.createSnapshot(cycleId)
-
-  await prisma.monthlyCycle.update({
-    where: { id: cycleId },
-    data: { cycleStatus: "closed", closedAt: new Date() },
-  })
-
-  const cycle = await prisma.monthlyCycle.findUnique({
-    where: { id: cycleId },
-    select: { market: { select: { id: true } } },
-  })
-  revalidatePath(`/markets/${cycle?.market.id}`)
-  revalidatePath("/")
-}
 export async function addCustomer(formData: FormData) {
   const marketId = formData.get("marketId") as string
   const name = formData.get("name") as string
