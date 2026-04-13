@@ -21,6 +21,8 @@ import { getMarketNoteWithFallback } from "@/lib/market-notes"
 import { MarketTasksPanel } from "@/components/markets/market-tasks-panel"
 import { MarketNotesPanel } from "@/components/markets/market-notes-panel"
 
+const MONTH_RE = /^\d{4}-\d{2}$/
+
 export default async function MarketDetailPage({
   params,
   searchParams,
@@ -29,7 +31,8 @@ export default async function MarketDetailPage({
   searchParams: Promise<{ month?: string }>
 }) {
   const { id } = await params
-  const { month: monthParam } = await searchParams
+  const rawSearch = await searchParams
+  const monthParam = typeof rawSearch?.month === "string" ? rawSearch.month : undefined
 
   const market = await prisma.market.findUnique({
     where: { id },
@@ -55,9 +58,10 @@ export default async function MarketDetailPage({
     orderBy: { month: "asc" },
   })
   const ALL_MONTHS = availableMonthRows.map((r) => r.month)
-  const selectedMonth = monthParam && ALL_MONTHS.includes(monthParam)
+  const validParam = monthParam && MONTH_RE.test(monthParam) && ALL_MONTHS.includes(monthParam)
     ? monthParam
-    : ALL_MONTHS[ALL_MONTHS.length - 1] ?? "2026-04"
+    : null
+  const selectedMonth = validParam ?? ALL_MONTHS[ALL_MONTHS.length - 1] ?? new Date().toISOString().slice(0, 7)
 
   const fibers = await prisma.fiber.findMany({ orderBy: { code: "asc" } })
 

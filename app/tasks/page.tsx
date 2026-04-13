@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic"
+
 import { Card, CardContent } from "@/components/ui/card"
 import { getAllPendingTasks } from "@/lib/market-tasks"
 import { completeTaskAction } from "./actions"

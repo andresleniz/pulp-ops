@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic"
+
 import Link from "next/link"
 import { getRegionalHistoricalCharts } from "@/lib/indexes-chart-queries"
 import RegionalIndexChartClient from "./RegionalIndexChartClient"

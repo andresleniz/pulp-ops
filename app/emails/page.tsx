@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic"
+
 import { prisma } from "@/lib/prisma"
 import { markSent, updateBody, deleteDraft } from "./actions"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"

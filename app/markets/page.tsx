@@ -16,12 +16,20 @@ function monthLabel(month: string): string {
   return new Date(y, m - 1).toLocaleString("en-US", { month: "long", year: "numeric" })
 }
 
+const MONTH_RE = /^\d{4}-\d{2}$/
+
+function safeMonth(raw: string | undefined, available: string[]): string {
+  const validated = raw && MONTH_RE.test(raw) && available.includes(raw) ? raw : null
+  return validated ?? available[0] ?? new Date().toISOString().slice(0, 7)
+}
+
 export default async function MarketsPage({
   searchParams,
 }: {
   searchParams: Promise<{ month?: string }>
 }) {
-  const { month: monthParam } = await searchParams
+  const raw = await searchParams
+  const monthParam = typeof raw?.month === "string" ? raw.month : undefined
 
   const availableMonths = await prisma.monthlyCycle.findMany({
     select: { month: true },
@@ -29,9 +37,7 @@ export default async function MarketsPage({
     orderBy: { month: "desc" },
   })
   const months = availableMonths.map((r) => r.month)
-  const CURRENT_MONTH = monthParam && months.includes(monthParam)
-    ? monthParam
-    : months[0] ?? new Date().toISOString().slice(0, 7)
+  const CURRENT_MONTH = safeMonth(monthParam, months)
 
   const cycles = await prisma.monthlyCycle.findMany({
     where: { month: CURRENT_MONTH },
