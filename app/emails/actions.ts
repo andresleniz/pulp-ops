@@ -1,20 +1,8 @@
 "use server"
 
-import {
-  generateEmailsForMonth,
-  markEmailSent,
-  updateDraftBody,
-} from "@/lib/email-engine"
+import { markEmailSent, updateDraftBody } from "@/lib/email-engine"
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
-
-// ── Existing ──────────────────────────────────────────────────────────────────
-
-export async function generateAllDrafts(formData: FormData) {
-  const month = formData.get("month") as string
-  await generateEmailsForMonth(month)
-  revalidatePath("/emails")
-}
 
 export async function markSent(formData: FormData) {
   const draftId = formData.get("draftId") as string

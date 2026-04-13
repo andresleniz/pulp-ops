@@ -1,8 +1,8 @@
+export const dynamic = "force-dynamic"
+
 import { prisma } from "@/lib/prisma"
 import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
-
-const CURRENT_MONTH = "2026-03"
 
 const priceStatusStyle: Record<string, string> = {
   not_started: "bg-gray-100 text-gray-600",
@@ -11,7 +11,28 @@ const priceStatusStyle: Record<string, string> = {
   revised: "bg-blue-100 text-blue-700",
 }
 
-export default async function MarketsPage() {
+function monthLabel(month: string): string {
+  const [y, m] = month.split("-").map(Number)
+  return new Date(y, m - 1).toLocaleString("en-US", { month: "long", year: "numeric" })
+}
+
+export default async function MarketsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string }>
+}) {
+  const { month: monthParam } = await searchParams
+
+  const availableMonths = await prisma.monthlyCycle.findMany({
+    select: { month: true },
+    distinct: ["month"],
+    orderBy: { month: "desc" },
+  })
+  const months = availableMonths.map((r) => r.month)
+  const CURRENT_MONTH = monthParam && months.includes(monthParam)
+    ? monthParam
+    : months[0] ?? new Date().toISOString().slice(0, 7)
+
   const cycles = await prisma.monthlyCycle.findMany({
     where: { month: CURRENT_MONTH },
     include: {
@@ -25,7 +46,7 @@ export default async function MarketsPage() {
     <div className="p-6 max-w-6xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold">All Markets</h1>
-        <p className="text-sm text-gray-500 mt-1">April 2025</p>
+        <p className="text-sm text-gray-500 mt-1">{monthLabel(CURRENT_MONTH)}</p>
       </div>
       <Card>
         <CardContent className="p-0">
@@ -84,7 +105,7 @@ export default async function MarketsPage() {
                     <td className="px-4 py-3 font-mono text-xs">{getPrice("UKP")}</td>
                     <td className="px-4 py-3">
                       <Link
-                        href={`/markets/${cycle.market.id}`}
+                        href={`/markets/${cycle.market.id}?month=${CURRENT_MONTH}`}
                         className="text-xs text-blue-600 hover:underline"
                       >
                         Open →

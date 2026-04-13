@@ -214,51 +214,6 @@ async function main() {
     })
   }
 
-  await prisma.emailTemplate.upsert({
-    where: { templateKey_version: { templateKey: "taiwan_announcement", version: 1 } }, update: {},
-    create: {
-      templateKey: "taiwan_announcement", version: 1, marketId: mktTaiwan.id,
-      subjectTemplate: "Taiwan Pulp Prices — {{MONTH}}",
-      bodyTemplate: `Dear Silvia,\n\nPlease note the updated prices for Taiwan:\n\nBKP: {{TW_BKP}} USD/ADT ({{TW_BKP_CHANGE}})\nEKP: {{TW_EKP}} USD/ADT ({{TW_EKP_CHANGE}})\nUKP: {{TW_UKP}} USD/ADT ({{TW_UKP_CHANGE}})\n\nFor China please apply the following adjustment:\n\nBKP: {{TW_CN_BKP}} USD/ADT ({{TW_CN_BKP_CHANGE}})\nEKP: {{TW_CN_EKP}} USD/ADT ({{TW_CN_EKP_CHANGE}})\nUKP: {{TW_CN_UKP}} USD/ADT ({{TW_CN_UKP_CHANGE}})\n\nIf any price adjustments occur during the month, an update will be communicated.\n\nBrgds,\nAndrés`,
-    },
-  })
-
-  await prisma.emailTemplate.upsert({
-    where: { templateKey_version: { templateKey: "pakistan_announcement", version: 1 } }, update: {},
-    create: {
-      templateKey: "pakistan_announcement", version: 1, marketId: mktPakistan.id,
-      subjectTemplate: "Pakistan Pulp Prices — {{MONTH}}",
-      bodyTemplate: `Dear Team,\n\nPlease find below the agreed prices for {{MONTH}}:\n\nEKP: {{PK_EKP}} USD/ADT\nUKP: {{PK_UKP}} USD/ADT\n\nKindly confirm receipt at your earliest convenience.\n\nBest regards,\nAndrés`,
-    },
-  })
-
-  await prisma.emailTemplate.upsert({
-    where: { templateKey_version: { templateKey: "sofidel_quote", version: 1 } }, update: {},
-    create: {
-      templateKey: "sofidel_quote", version: 1, marketId: mktSofidel.id,
-      subjectTemplate: "EKP Mill Prices — {{MONTH}}",
-      bodyTemplate: `Dear Sofidel Team,\n\nPlease find below the EKP prices for {{MONTH}}:\n\nShelby:      {{SOF_SHELBY}} USD/ADT ({{SOF_SHELBY_CHANGE}})\nCircleville: {{SOF_CIRCLEVILLE}} USD/ADT ({{SOF_CIRCLEVILLE_CHANGE}})\nGila Bend:   {{SOF_GILABEND}} USD/ADT ({{SOF_GILABEND_CHANGE}})\n\nThese are based on TTO {{TTO}} USD/ADT.\n\nPlease confirm at your earliest convenience.\n\nBest regards,\nAndrés`,
-    },
-  })
-
-  await prisma.emailTemplate.upsert({
-    where: { templateKey_version: { templateKey: "jh_quote", version: 1 } }, update: {},
-    create: {
-      templateKey: "jh_quote", version: 1, marketId: mktJH.id,
-      subjectTemplate: "James Hardie UKP Mill Prices — {{MONTH}}",
-      bodyTemplate: `Dear James Hardie Team,\n\nPlease find below the UKP prices for {{MONTH}}:\n\nPulaski:    {{JH_PULASKI}} USD/ADT ({{JH_PULASKI_CHANGE}})\nPeru:       {{JH_PERU}} USD/ADT ({{JH_PERU_CHANGE}})\nPC:         {{JH_PC}} USD/ADT ({{JH_PC_CHANGE}})\nReno:       {{JH_RENO}} USD/ADT ({{JH_RENO_CHANGE}})\nPrattville: {{JH_PRATTVILLE}} USD/ADT ({{JH_PRATTVILLE_CHANGE}})\n\nPlease confirm receipt and acceptance.\n\nBest regards,\nAndrés`,
-    },
-  })
-
-  await prisma.emailTemplate.upsert({
-    where: { templateKey_version: { templateKey: "nz_quote", version: 1 } }, update: {},
-    create: {
-      templateKey: "nz_quote", version: 1, marketId: mktNZ.id,
-      subjectTemplate: "New Zealand EKP Price — {{MONTH}}",
-      bodyTemplate: `Dear Whakatane Team,\n\nPlease find below the EKP price for {{MONTH}}:\n\nEKP (Whakatane): {{NZ_EKP}} USD/ADT ({{NZ_EKP_CHANGE}})\n\nFormula: PIX China ({{PIX_CHINA}}) × 0.985 + 25\n\nPlease confirm.\n\nBest regards,\nAndrés`,
-    },
-  })
-
   const cycleRows = [
     { market: mktTaiwan, month: "2025-12", priceStatus: "decided" as PriceStatus, commStatus: "confirmed" as CommStatus, orderStatus: "closed" as OrderStatus, cycleStatus: "closed" as CycleStatus },
     { market: mktTaiwan, month: "2026-01", priceStatus: "decided" as PriceStatus, commStatus: "confirmed" as CommStatus, orderStatus: "closed" as OrderStatus, cycleStatus: "closed" as CycleStatus },

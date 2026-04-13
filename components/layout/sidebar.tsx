@@ -27,7 +27,6 @@ const nav = [
   { label: "Records", items: [
   { href: "/orders", label: "Orders", icon: "▤" },
   { href: "/import", label: "CRM Import", icon: "↑" },
-  { href: "/audit", label: "Audit Trail", icon: "⌦" },
 ]},
 ]
 

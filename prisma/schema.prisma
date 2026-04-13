@@ -28,7 +28,6 @@ model Market {
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
   customers            Customer[]
-  emailTemplates       EmailTemplate[]
   agent                Agent?             @relation(fields: [agentId], references: [id])
   region               Region             @relation(fields: [regionId], references: [id])
   mills                Mill[]
@@ -247,28 +246,10 @@ model MonthlyPrice {
   @@index([cycleId])
 }
 
-model EmailTemplate {
-  id              String       @id @default(cuid())
-  templateKey     String
-  version         Int          @default(1)
-  marketId        String?
-  subjectTemplate String
-  bodyTemplate    String
-  isActive        Boolean      @default(true)
-  notes           String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  emailDrafts     EmailDraft[]
-  market          Market?      @relation(fields: [marketId], references: [id])
-
-  @@unique([templateKey, version])
-}
-
 model EmailDraft {
   id           String           @id @default(cuid())
   month        String
   cycleId      String
-  templateId   String?
   marketId     String?
   customerId   String?
   agentId      String?
@@ -285,7 +266,6 @@ model EmailDraft {
   agent        Agent?           @relation(fields: [agentId], references: [id])
   customer     Customer?        @relation(fields: [customerId], references: [id])
   cycle        MonthlyCycle     @relation(fields: [cycleId], references: [id])
-  template     EmailTemplate?   @relation(fields: [templateId], references: [id])
 
   @@index([cycleId])
 }
