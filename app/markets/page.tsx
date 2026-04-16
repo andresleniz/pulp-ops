@@ -31,7 +31,11 @@ export default async function MarketsPage({
   const raw = await searchParams
   const monthParam = typeof raw?.month === "string" ? raw.month : undefined
 
+  const today = new Date()
+  const maxValidMonth = `${today.getFullYear() + 1}-${String(today.getMonth() + 1).padStart(2, "0")}`
+
   const availableMonths = await prisma.monthlyCycle.findMany({
+    where: { month: { lte: maxValidMonth } },
     select: { month: true },
     distinct: ["month"],
     orderBy: { month: "desc" },

@@ -30,6 +30,8 @@ export const MARKET_DISPLAY_ORDER: readonly string[] = [
   "India",
   "Vietnam",
   "Malaysia",
+  "Turkey",
+  "Europe",
 ]
 
 /**

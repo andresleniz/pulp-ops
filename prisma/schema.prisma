@@ -326,13 +326,14 @@ model OrderRecord {
   source         String       @default("CRM")  // "CRM" | "Manual"
   reference      String?
   notes          String?
-  freightPerAdmt Decimal?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  customer       Customer     @relation(fields: [customerId], references: [id])
-  cycle          MonthlyCycle @relation(fields: [cycleId], references: [id])
-  fiber          Fiber        @relation(fields: [fiberId], references: [id])
-  mill           Mill?        @relation(fields: [millId], references: [id])
+  freightPerAdmt  Decimal?
+  destinationPort String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  customer        Customer     @relation(fields: [customerId], references: [id])
+  cycle           MonthlyCycle @relation(fields: [cycleId], references: [id])
+  fiber           Fiber        @relation(fields: [fiberId], references: [id])
+  mill            Mill?        @relation(fields: [millId], references: [id])
 
   @@index([cycleId])
   @@index([cycleId, customerId, fiberId, source])

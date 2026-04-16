@@ -12,6 +12,7 @@ async function main() {
   const rSouthAsia = await prisma.region.upsert({ where: { name: "South Asia" }, update: {}, create: { name: "South Asia" } })
   const rSEAsia = await prisma.region.upsert({ where: { name: "Southeast Asia" }, update: {}, create: { name: "Southeast Asia" } })
   const rOceania = await prisma.region.upsert({ where: { name: "Oceania" }, update: {}, create: { name: "Oceania" } })
+  const rEurope = await prisma.region.upsert({ where: { name: "Europe" }, update: {}, create: { name: "Europe" } })
 
   const fBKP = await prisma.fiber.upsert({ where: { code: "BKP" }, update: {}, create: { code: "BKP", name: "Bleached Kraft Pulp", unit: "USD/ADT" } })
   const fEKP = await prisma.fiber.upsert({ where: { code: "EKP" }, update: {}, create: { code: "EKP", name: "Elemental Chlorine-Free Kraft Pulp", unit: "USD/ADT" } })
@@ -103,6 +104,14 @@ async function main() {
   await prisma.market.upsert({
     where: { name: "Vietnam" }, update: {},
     create: { name: "Vietnam", regionId: rSEAsia.id, requiresAnnouncement: false, communicationType: "email", notes: "Imported from CRM." },
+  })
+  await prisma.market.upsert({
+    where: { name: "Turkey" }, update: {},
+    create: { name: "Turkey", regionId: rEurope.id, requiresAnnouncement: false, communicationType: "email", notes: "Imported from CRM." },
+  })
+  await prisma.market.upsert({
+    where: { name: "Europe" }, update: {},
+    create: { name: "Europe", regionId: rEurope.id, requiresAnnouncement: false, communicationType: "email", notes: "Bucket market for European CRM rows not covered by a more specific market." },
   })
 
   const existingSg = await prisma.subgroup.findFirst({

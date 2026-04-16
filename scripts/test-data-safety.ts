@@ -165,13 +165,14 @@ async function testDashboardIsolation() {
 
   const months = ["2026-02", "2026-03", "2026-04", "2026-05"]
 
-  // C1. Each test month must have exactly 11 market cycles
-  let allEleven = true
+  // C1. Each test month must have exactly 13 market cycles (11 original + Turkey + Europe)
+  const expectedMarketCount = await prisma.market.count()
+  let allMatch = true
   for (const m of months) {
     const count = await prisma.monthlyCycle.count({ where: { month: { startsWith: m } } })
-    if (count !== 11) allEleven = false
+    if (count !== expectedMarketCount) allMatch = false
   }
-  assert(allEleven, "All test months have exactly 11 markets")
+  assert(allMatch, `All test months have exactly ${expectedMarketCount} markets`)
 
   // C2. India is present in all months
   const india = await prisma.market.findFirst({ where: { name: "India" } })

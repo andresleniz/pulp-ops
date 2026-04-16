@@ -43,8 +43,13 @@ export default async function DashboardPage({
 }) {
   const { month: monthParam } = await searchParams
 
-  // Find all months that have cycles so the selector only shows real months
+  // Find all months that have cycles, capped at 12 months ahead of today so
+  // test data or bad imports can never hijack the dashboard default.
+  const today = new Date()
+  const maxValidMonth = `${today.getFullYear() + 1}-${String(today.getMonth() + 1).padStart(2, "0")}`
+
   const availableMonths = await prisma.monthlyCycle.findMany({
+    where: { month: { lte: maxValidMonth } },
     select: { month: true },
     distinct: ["month"],
     orderBy: { month: "desc" },
@@ -53,7 +58,7 @@ export default async function DashboardPage({
 
   const CURRENT_MONTH = monthParam && months.includes(monthParam)
     ? monthParam
-    : months[0] ?? "2026-04"
+    : months[0] ?? new Date().toISOString().slice(0, 7)
 
   const nextMonth = getNextMonth(CURRENT_MONTH)
   const nextMonthExists = months.includes(nextMonth)

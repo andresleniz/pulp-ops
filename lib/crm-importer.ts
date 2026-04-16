@@ -5,17 +5,60 @@ import { validateOrderWrite, evictManualOrders } from "@/lib/order-validation"
 import Decimal from "decimal.js"
 
 const COUNTRY_TO_MARKET: Record<string, string> = {
+  // Asia Pacific
   "TW - Taiwan": "Taiwan",
-  "AE - Utd.Arab.Emir.": "UAE",
-  "US - USA": "USA",
-  "NZ - New Zealand": "New Zealand",
-  "PK - Pakistan": "Pakistan",
   "JP - Japan": "Japan",
   "KR - South Korea": "Korea",
+  "NZ - New Zealand": "New Zealand",
+  // Middle East
+  "AE - Utd.Arab.Emir.": "UAE",
+  // North America
+  "US - USA": "USA",
+  // South / Southeast Asia
+  "PK - Pakistan": "Pakistan",
   "TH - Thailand": "Thailand",
   "IN - India": "India",
   "MY - Malaysia": "Malaysia",
   "VN - Vietnam": "Vietnam",
+  // Turkey — its own market
+  "TR - Turkey": "Turkey",
+  // Europe — all European countries roll into the Europe market unless already
+  // mapped above.  Add entries here as new country codes appear in CRM files.
+  "DE - Germany": "Europe",
+  "FR - France": "Europe",
+  "IT - Italy": "Europe",
+  "ES - Spain": "Europe",
+  "PT - Portugal": "Europe",
+  "PL - Poland": "Europe",
+  "NL - Netherlands": "Europe",
+  "BE - Belgium": "Europe",
+  "SE - Sweden": "Europe",
+  "NO - Norway": "Europe",
+  "FI - Finland": "Europe",
+  "DK - Denmark": "Europe",
+  "AT - Austria": "Europe",
+  "CH - Switzerland": "Europe",
+  "GB - United Kingdom": "Europe",
+  "GB - U.K.": "Europe",
+  "IE - Ireland": "Europe",
+  "CZ - Czech Republic": "Europe",
+  "CZ - Czech Rep.": "Europe",
+  "HU - Hungary": "Europe",
+  "RO - Romania": "Europe",
+  "BG - Bulgaria": "Europe",
+  "HR - Croatia": "Europe",
+  "SK - Slovakia": "Europe",
+  "SI - Slovenia": "Europe",
+  "LV - Latvia": "Europe",
+  "LT - Lithuania": "Europe",
+  "EE - Estonia": "Europe",
+  "LU - Luxembourg": "Europe",
+  "GR - Greece": "Europe",
+  "RS - Serbia": "Europe",
+  "BA - Bosnia-Herzegov.": "Europe",
+  "BA - Bosnia and Herzegovina": "Europe",
+  "MK - North Macedonia": "Europe",
+  "UA - Ukraine": "Europe",
 }
 
 const US_MILL_TO_CUSTOMER: Record<string, string> = {
@@ -56,6 +99,7 @@ export interface CRMRow {
   price: number | null
   mill: string | null
   comments: string | null
+  destinationPort: string | null
 }
 
 export interface ImportResult {
@@ -214,6 +258,7 @@ export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
             source: "CRM",
             status: "ordered",
             notes: row.comments ?? null,
+            destinationPort: row.destinationPort?.trim() || null,
           },
         })
         result.updated++
@@ -228,6 +273,7 @@ export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
             status: "ordered",
             reference: row.orderRef ?? null,
             notes: row.comments ?? null,
+            destinationPort: row.destinationPort?.trim() || null,
           },
         })
         result.created++
@@ -318,6 +364,7 @@ export interface USARow {
   price: number | null
   freightPerAdmt: number | null
   notes: string | null
+  destinationPort: string | null
 }
 
 export async function importUSARows(rows: USARow[]): Promise<ImportResult> {
@@ -429,6 +476,7 @@ export async function importUSARows(rows: USARow[]): Promise<ImportResult> {
             source: "CRM",
             status: "ordered",
             notes: row.notes ?? null,
+            destinationPort: row.destinationPort?.trim() || null,
           },
         })
         result.created++

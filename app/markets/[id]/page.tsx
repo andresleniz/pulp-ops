@@ -15,11 +15,12 @@ import { USACharts } from "@/components/markets/usa-charts"
 import { VolumeAdjustmentPanel } from "@/components/markets/volume-adjustment-panel"
 import { VolumeChart } from "@/components/markets/volume-chart"
 import { getEffectiveMonthlyPrices } from "@/lib/price-queries"
-import { getVolumeChartData } from "@/lib/volume-queries"
+import { getVolumeChartData, getMarketDestinationPortVolumes } from "@/lib/volume-queries"
 import { listMarketTasks } from "@/lib/market-tasks"
 import { getMarketNoteWithFallback } from "@/lib/market-notes"
 import { MarketTasksPanel } from "@/components/markets/market-tasks-panel"
 import { MarketNotesPanel } from "@/components/markets/market-notes-panel"
+import { DestinationPortPanel } from "@/components/markets/destination-port-panel"
 
 const MONTH_RE = /^\d{4}-\d{2}$/
 
@@ -184,6 +185,9 @@ export default async function MarketDetailPage({
   // ── Volume chart data ────────────────────────────────────────────────────
   const volumeChartByFiber = await getVolumeChartData({ marketId: market.id, months: chartMonths })
 
+  // ── Destination-port volume (nullable — empty when not yet in CRM data) ──
+  const destPortVolumes = await getMarketDestinationPortVolumes({ marketId: market.id })
+
   // ── Market tasks & notes ─────────────────────────────────────────────────
   // Tasks are market-scoped — visible regardless of which month is selected
   const marketTasks = await listMarketTasks(market.id)
@@ -268,36 +272,45 @@ export default async function MarketDetailPage({
             </CardContent>
           </Card>
 
-         {market.name === "USA" ? (
-  <USACharts />
-) : (
-  <>
-    {Object.keys(chartDataByFiber).length > 0 && (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Price History — Last 12 Months</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {Object.entries(chartDataByFiber).map(([fiberCode, { data, customers }]) => (
-            <PriceChart key={fiberCode} fiberCode={fiberCode} data={data} customers={customers} />
-          ))}
-        </CardContent>
-      </Card>
-    )}
-    {Object.keys(volumeChartByFiber).length > 0 && (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Volume History — Last 12 Months</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {Object.entries(volumeChartByFiber).map(([fiberCode, { data, customers }]) => (
-            <VolumeChart key={fiberCode} fiberCode={fiberCode} data={data} customers={customers} />
-          ))}
-        </CardContent>
-      </Card>
-    )}
-  </>
-)}
+          {market.name === "USA" ? (
+            <USACharts />
+          ) : (
+            <>
+              {Object.keys(chartDataByFiber).length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Price History — Last 12 Months</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {Object.entries(chartDataByFiber).map(([fiberCode, { data, customers }]) => (
+                      <PriceChart key={fiberCode} fiberCode={fiberCode} data={data} customers={customers} />
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+              {Object.keys(volumeChartByFiber).length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Volume History — Last 12 Months</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {Object.entries(volumeChartByFiber).map(([fiberCode, { data, customers }]) => (
+                      <VolumeChart key={fiberCode} fiberCode={fiberCode} data={data} customers={customers} />
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Volume by Destination Port</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DestinationPortPanel rows={destPortVolumes} />
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader className="pb-2">

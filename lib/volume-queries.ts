@@ -82,3 +82,72 @@ export async function getVolumeChartData(params: {
 
   return result
 }
+
+// ── Destination-port volume ──────────────────────────────────────────────────
+
+export interface DestinationPortVolumeRow {
+  destinationPort: string
+  month: string
+  volume: number
+}
+
+/**
+ * Returns CRM volume grouped by destination port and month for a market.
+ *
+ * Rows are excluded when destinationPort is null or an empty string.
+ * Port values are trimmed before grouping so leading/trailing whitespace
+ * cannot produce duplicate buckets.
+ * Returns an empty array when no valid destination port data exists.
+ *
+ * @param marketId  Target market id
+ * @param months    Optional YYYY-MM list to restrict the window. When omitted,
+ *                  all historical records for the market are included.
+ */
+export async function getMarketDestinationPortVolumes(params: {
+  marketId: string
+  months?: string[]
+}): Promise<DestinationPortVolumeRow[]> {
+  const { marketId, months } = params
+
+  const cycleWhere: Record<string, unknown> = { marketId }
+  if (months && months.length > 0) {
+    cycleWhere.month = { in: months }
+  }
+
+  const records = await prisma.orderRecord.findMany({
+    where: {
+      ...CRM_FILTER,
+      // Exclude null and empty-string ports at the DB level
+      destinationPort: { not: null, notIn: [""] },
+      cycle: cycleWhere,
+    },
+    select: {
+      destinationPort: true,
+      volume: true,
+      cycle: { select: { month: true } },
+    },
+  })
+
+  // Aggregate: sum volume per (trimmed destinationPort, month) pair.
+  // The trim here is a defensive guard — values are already normalized at
+  // import time, but this prevents whitespace-fragmented buckets if any
+  // legacy or manually-inserted record slipped through.
+  const map = new Map<string, number>()
+  for (const r of records) {
+    const port = r.destinationPort!.trim()
+    if (!port) continue // skip anything that trims down to empty
+    const key = `${port}|||${r.cycle.month}`
+    map.set(key, (map.get(key) ?? 0) + Number(r.volume))
+  }
+
+  return [...map.entries()]
+    .map(([key, volume]) => {
+      const sep = key.indexOf("|||")
+      return {
+        destinationPort: key.slice(0, sep),
+        month: key.slice(sep + 3),
+        volume,
+      }
+    })
+    .sort((a, b) => a.month.localeCompare(b.month) || a.destinationPort.localeCompare(b.destinationPort))
+}

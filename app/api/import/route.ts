@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 import { importCRMRows, CRMRow } from "@/lib/crm-importer"
 
+// Accepted column name aliases for destination port — checked in order, first match wins.
+const DEST_PORT_ALIASES = ["Destination Port", "DestinationPort", "Port"]
+
+function pickDestinationPort(r: Record<string, unknown>): string | null {
+  for (const alias of DEST_PORT_ALIASES) {
+    const val = r[alias]
+    if (typeof val === "string" && val.trim()) return val.trim()
+  }
+  return null
+}
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData()
@@ -46,6 +57,7 @@ export async function POST(req: NextRequest) {
       price: r["Price"] as number | null,
       mill: r["Mill"] as string | null,
       comments: r["Comments"] as string | null,
+      destinationPort: pickDestinationPort(r),
     }))
 
     const result = await importCRMRows(rows)
