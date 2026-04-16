@@ -83,6 +83,129 @@ export async function getVolumeChartData(params: {
   return result
 }
 
+// ── Europe country-level volume ──────────────────────────────────────────────
+
+/**
+ * Returns per-fiber volume chart data for the Europe market, grouped by country
+ * instead of customer.  Uses `OrderRecord.country` populated at CRM import time.
+ *
+ * Shape is identical to VolumeChartSeries so the existing VolumeChart component
+ * can be reused directly with country names as series keys.
+ *
+ * Orders without a country value are skipped (they pre-date the country field).
+ */
+export async function getEuropeCountryLevelSeries(params: {
+  marketId: string
+  months: string[]
+}): Promise<Record<string, VolumeChartSeries>> {
+  const { marketId, months } = params
+
+  const orders = await prisma.orderRecord.findMany({
+    where: {
+      ...CRM_FILTER,
+      country: { not: null },
+      cycle: { marketId, month: { in: months } },
+    },
+    select: {
+      country: true,
+      volume: true,
+      fiber: { select: { code: true } },
+      cycle: { select: { month: true } },
+    },
+  })
+
+  const fiberCodes = [...new Set(orders.map((o) => o.fiber.code))]
+  const result: Record<string, VolumeChartSeries> = {}
+
+  for (const fiberCode of fiberCodes) {
+    const fiberOrders = orders.filter((o) => o.fiber.code === fiberCode)
+    const countries = [...new Set(fiberOrders.map((o) => o.country as string))].sort()
+
+    const monthMap: Record<string, Record<string, number>> = {}
+    for (const m of months) {
+      monthMap[m] = {}
+      for (const c of countries) monthMap[m][c] = 0
+    }
+    for (const order of fiberOrders) {
+      const country = order.country as string
+      const month = order.cycle.month
+      if (monthMap[month]) {
+        monthMap[month][country] = (monthMap[month][country] ?? 0) + Number(order.volume)
+      }
+    }
+
+    result[fiberCode] = {
+      data: months.map((m) => {
+        const point: Record<string, string | number | null> = { month: m.slice(2) }
+        let total = 0
+        for (const c of countries) {
+          const vol = monthMap[m]?.[c] || null
+          point[c] = vol
+          total += vol ?? 0
+        }
+        point["Total"] = total > 0 ? total : null
+        return point
+      }),
+      customers: countries,
+    }
+  }
+
+  return result
+}
+
+export interface EuropeCountryDrilldownEntry {
+  customer: string
+  month: string
+  volume: number
+  price: number
+}
+
+/**
+ * Returns per-country customer+month detail for the Europe market.
+ * Used to power the drill-down table when a user expands a country row.
+ *
+ * Returns `Record<countryName, EuropeCountryDrilldownEntry[]>` sorted by
+ * month desc, then customer asc.
+ */
+export async function getEuropeCountryDrilldown(params: {
+  marketId: string
+  months?: string[]
+}): Promise<Record<string, EuropeCountryDrilldownEntry[]>> {
+  const { marketId, months } = params
+
+  const cycleWhere: Record<string, unknown> = { marketId }
+  if (months && months.length > 0) cycleWhere.month = { in: months }
+
+  const orders = await prisma.orderRecord.findMany({
+    where: {
+      ...CRM_FILTER,
+      country: { not: null },
+      cycle: cycleWhere,
+    },
+    select: {
+      country: true,
+      volume: true,
+      price: true,
+      customer: { select: { name: true } },
+      cycle: { select: { month: true } },
+    },
+    orderBy: [{ cycle: { month: "desc" } }, { customer: { name: "asc" } }],
+  })
+
+  const result: Record<string, EuropeCountryDrilldownEntry[]> = {}
+  for (const order of orders) {
+    const country = order.country as string
+    if (!result[country]) result[country] = []
+    result[country].push({
+      customer: order.customer.name,
+      month: order.cycle.month,
+      volume: Number(order.volume),
+      price: Number(order.price),
+    })
+  }
+  return result
+}
+
 // ── Destination-port volume ──────────────────────────────────────────────────
 
 export interface DestinationPortVolumeRow {

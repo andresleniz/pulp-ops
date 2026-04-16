@@ -17,6 +17,7 @@ async function main() {
   const fBKP = await prisma.fiber.upsert({ where: { code: "BKP" }, update: {}, create: { code: "BKP", name: "Bleached Kraft Pulp", unit: "USD/ADT" } })
   const fEKP = await prisma.fiber.upsert({ where: { code: "EKP" }, update: {}, create: { code: "EKP", name: "Elemental Chlorine-Free Kraft Pulp", unit: "USD/ADT" } })
   const fUKP = await prisma.fiber.upsert({ where: { code: "UKP" }, update: {}, create: { code: "UKP", name: "Unbleached Kraft Pulp", unit: "USD/ADT" } })
+  await prisma.fiber.upsert({ where: { code: "EKP MDP" }, update: {}, create: { code: "EKP MDP", name: "EKP Medium Density Pulp", unit: "USD/ADT" } })
 
   const agentSilvia = await prisma.agent.upsert({
     where: { email: "silvia.hsu@ekman.com" },

@@ -17,8 +17,7 @@ prisma/*.db
 prisma/*.db-shm
 prisma/*.db-wal
 
-# SQLite migrations (replaced by PostgreSQL)
-prisma/migrations/
+
 
 # Build artifacts
 build/

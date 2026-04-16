@@ -71,9 +71,53 @@ function normalizeGrade(grade: string): string | null {
   if (!grade) return null
   const g = grade.toUpperCase().trim()
   if (g === "BKP") return "BKP"
+  if (g === "EKP MDP") return "EKP MDP"   // must precede the startsWith("EKP") check
   if (g.startsWith("EKP")) return "EKP"
   if (g.startsWith("UKP")) return "UKP"
   return null
+}
+
+// Maps ISO 2-letter prefix (from CRM country codes like "DE - Germany") to a
+// clean display name.  Used to populate OrderRecord.country for Europe orders.
+const ISO_TO_COUNTRY: Record<string, string> = {
+  "DE": "Germany",
+  "FR": "France",
+  "IT": "Italy",
+  "ES": "Spain",
+  "PT": "Portugal",
+  "PL": "Poland",
+  "NL": "Netherlands",
+  "BE": "Belgium",
+  "SE": "Sweden",
+  "NO": "Norway",
+  "FI": "Finland",
+  "DK": "Denmark",
+  "AT": "Austria",
+  "CH": "Switzerland",
+  "GB": "United Kingdom",
+  "IE": "Ireland",
+  "CZ": "Czech Republic",
+  "HU": "Hungary",
+  "RO": "Romania",
+  "BG": "Bulgaria",
+  "HR": "Croatia",
+  "SK": "Slovakia",
+  "SI": "Slovenia",
+  "LV": "Latvia",
+  "LT": "Lithuania",
+  "EE": "Estonia",
+  "LU": "Luxembourg",
+  "GR": "Greece",
+  "RS": "Serbia",
+  "BA": "Bosnia-Herzegovina",
+  "MK": "North Macedonia",
+  "UA": "Ukraine",
+}
+
+function extractCountryName(countryCode: string | null): string | null {
+  if (!countryCode) return null
+  const iso = countryCode.split(" - ")[0].trim()
+  return ISO_TO_COUNTRY[iso] ?? null
 }
 
 const MONTH_MAP: Record<string, string> = {
@@ -249,6 +293,9 @@ export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
           })
         : null
 
+      // For Europe orders, store the country name so we can chart by country
+      const countryName = marketName === "Europe" ? extractCountryName(row.country) : null
+
       if (existingOrder) {
         await prisma.orderRecord.update({
           where: { id: existingOrder.id },
@@ -259,6 +306,7 @@ export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
             status: "ordered",
             notes: row.comments ?? null,
             destinationPort: row.destinationPort?.trim() || null,
+            country: countryName,
           },
         })
         result.updated++
@@ -274,6 +322,7 @@ export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
             reference: row.orderRef ?? null,
             notes: row.comments ?? null,
             destinationPort: row.destinationPort?.trim() || null,
+            country: countryName,
           },
         })
         result.created++

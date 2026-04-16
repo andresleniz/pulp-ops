@@ -165,11 +165,43 @@ const notesMonthScopeV1: Migration = {
   },
 }
 
+/**
+ * MIGRATION: ekp-mdp-fiber-v1
+ *
+ * WHY: EKP MDP is a distinct fiber/quality imported via CRM.  Prior to this
+ * migration, normalizeGrade() collapsed "EKP MDP" to "EKP", silently losing
+ * the distinction.  Now that normalizeGrade() returns "EKP MDP" correctly, the
+ * Fiber row must exist before any CRM import runs.
+ *
+ * This migration creates the Fiber row if it does not already exist.
+ * Safe to run multiple times — upsert is idempotent.
+ */
+const ekpMdpFiberV1: Migration = {
+  id: "ekp-mdp-fiber-v1",
+
+  description: "Create EKP MDP fiber row so CRM imports can use the distinct grade",
+
+  async check() {
+    const existing = await prisma.fiber.findUnique({ where: { code: "EKP MDP" } })
+    return existing === null
+  },
+
+  async run() {
+    await prisma.fiber.upsert({
+      where: { code: "EKP MDP" },
+      update: {},
+      create: { code: "EKP MDP", name: "EKP Medium Density Pulp", unit: "USD/ADT" },
+    })
+    await logMigration("ekp-mdp-fiber-v1", "Created EKP MDP fiber row")
+  },
+}
+
 // ── Registered migrations (in run order) ─────────────────────────────────────
 
 const MIGRATIONS: Migration[] = [
   tasksMarketScopeV1,
   notesMonthScopeV1,
+  ekpMdpFiberV1,
 ]
 
 // ── Runner ────────────────────────────────────────────────────────────────────

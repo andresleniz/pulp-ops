@@ -4,8 +4,8 @@ import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { CycleStatusForm } from "@/components/markets/cycle-status-form"
 import { PriceTable } from "@/components/markets/price-table"
-import { NegotiationTimeline } from "@/components/markets/negotiation-timeline"
 import { PriceChart } from "@/components/markets/price-chart"
+import { EuropeVolumeSection } from "@/components/markets/europe-volume-section"
 import { CustomerPanel } from "@/components/markets/customer-panel"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -15,7 +15,7 @@ import { USACharts } from "@/components/markets/usa-charts"
 import { VolumeAdjustmentPanel } from "@/components/markets/volume-adjustment-panel"
 import { VolumeChart } from "@/components/markets/volume-chart"
 import { getEffectiveMonthlyPrices } from "@/lib/price-queries"
-import { getVolumeChartData, getMarketDestinationPortVolumes } from "@/lib/volume-queries"
+import { getVolumeChartData, getMarketDestinationPortVolumes, getEuropeCountryLevelSeries, getEuropeCountryDrilldown } from "@/lib/volume-queries"
 import { listMarketTasks } from "@/lib/market-tasks"
 import { getMarketNoteWithFallback } from "@/lib/market-notes"
 import { MarketTasksPanel } from "@/components/markets/market-tasks-panel"
@@ -42,11 +42,6 @@ export default async function MarketDetailPage({
       agent: true,
       subgroups: true,
       customers: true,
-      pricingRules: {
-        where: { isActive: true },
-        include: { fiber: true, mill: true, subgroup: true },
-        orderBy: { priority: "asc" },
-      },
     },
   })
 
@@ -71,13 +66,6 @@ export default async function MarketDetailPage({
     include: {
       monthlyPrices: { include: { fiber: true, mill: true, customer: true } },
     },
-  })
-
-  const negotiations = await prisma.negotiationEvent.findMany({
-    where: { marketId: market.id },
-    include: { fiber: true, customer: true },
-    orderBy: { date: "desc" },
-    take: 10,
   })
 
   const emailDrafts = cycle
@@ -185,6 +173,15 @@ export default async function MarketDetailPage({
   // ── Volume chart data ────────────────────────────────────────────────────
   const volumeChartByFiber = await getVolumeChartData({ marketId: market.id, months: chartMonths })
 
+  // ── Europe country-level charts (only fetched for Europe market) ─────────
+  const isEurope = market.name === "Europe"
+  const [europeCountrySeries, europeCountryDrilldown] = isEurope
+    ? await Promise.all([
+        getEuropeCountryLevelSeries({ marketId: market.id, months: chartMonths }),
+        getEuropeCountryDrilldown({ marketId: market.id, months: chartMonths }),
+      ])
+    : [{}, {}]
+
   // ── Destination-port volume (nullable — empty when not yet in CRM data) ──
   const destPortVolumes = await getMarketDestinationPortVolumes({ marketId: market.id })
 
@@ -288,85 +285,40 @@ export default async function MarketDetailPage({
                   </CardContent>
                 </Card>
               )}
-              {Object.keys(volumeChartByFiber).length > 0 && (
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">Volume History — Last 12 Months</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    {Object.entries(volumeChartByFiber).map(([fiberCode, { data, customers }]) => (
-                      <VolumeChart key={fiberCode} fiberCode={fiberCode} data={data} customers={customers} />
-                    ))}
-                  </CardContent>
-                </Card>
+              {isEurope ? (
+                Object.keys(europeCountrySeries).length > 0 && (
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium">Volume by Country — Last 12 Months</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <EuropeVolumeSection
+                        seriesByFiber={europeCountrySeries}
+                        drilldown={europeCountryDrilldown}
+                      />
+                    </CardContent>
+                  </Card>
+                )
+              ) : (
+                Object.keys(volumeChartByFiber).length > 0 && (
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium">Volume History — Last 12 Months</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {Object.entries(volumeChartByFiber).map(([fiberCode, { data, customers }]) => (
+                        <VolumeChart key={fiberCode} fiberCode={fiberCode} data={data} customers={customers} />
+                      ))}
+                    </CardContent>
+                  </Card>
+                )
               )}
             </>
           )}
 
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Volume by Destination Port</CardTitle>
-            </CardHeader>
-            <CardContent>
+            <CardContent className="pt-4">
               <DestinationPortPanel rows={destPortVolumes} />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Pricing Rules</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs text-gray-400 border-b">
-                    <th className="text-left pb-2 font-medium">Fiber</th>
-                    <th className="text-left pb-2 font-medium">Mill / Subgroup</th>
-                    <th className="text-left pb-2 font-medium">Method</th>
-                    <th className="text-left pb-2 font-medium">Formula</th>
-                    <th className="text-left pb-2 font-medium">Priority</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {market.pricingRules.map((rule) => (
-                    <tr key={rule.id} className="border-b border-gray-50 hover:bg-gray-50">
-                      <td className="py-2 font-medium">{rule.fiber.code}</td>
-                      <td className="py-2 text-gray-500">
-                        {rule.mill?.name ?? rule.subgroup?.name ?? "—"}
-                      </td>
-                      <td className="py-2">
-                        <span className="text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded">
-                          {rule.method}
-                        </span>
-                      </td>
-                      <td className="py-2 text-gray-600 text-xs font-mono">
-                        {rule.formulaReadable ?? rule.formulaExpression ?? String(rule.manualPrice ?? "—")}
-                      </td>
-                      <td className="py-2 text-gray-400 text-xs">{rule.priority}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Negotiation History</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <NegotiationTimeline
-                negotiations={negotiations.map((n) => ({
-                  id: n.id,
-                  date: n.date.toISOString().slice(0, 10),
-                  fiber: n.fiber.code,
-                  price: n.discussedPrice ? Number(n.discussedPrice) : null,
-                  status: n.status,
-                  summary: n.summary ?? "",
-                  nextStep: n.nextStep ?? "",
-                  owner: n.owner,
-                }))}
-              />
             </CardContent>
           </Card>
 

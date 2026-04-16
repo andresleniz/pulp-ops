@@ -56,9 +56,12 @@ export default async function DashboardPage({
   })
   const months = availableMonths.map((c) => c.month)
 
+  // Prefer the current calendar month if it exists in the valid months list.
+  // Fall back to the most-recent valid month, then to the calendar month string.
+  const calendarMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`
   const CURRENT_MONTH = monthParam && months.includes(monthParam)
     ? monthParam
-    : months[0] ?? new Date().toISOString().slice(0, 7)
+    : months.includes(calendarMonth) ? calendarMonth : months[0] ?? calendarMonth
 
   const nextMonth = getNextMonth(CURRENT_MONTH)
   const nextMonthExists = months.includes(nextMonth)
