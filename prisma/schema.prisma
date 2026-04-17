@@ -329,6 +329,8 @@ model OrderRecord {
   freightPerAdmt  Decimal?
   destinationPort String?
   country         String?
+  currency        String?   // "EUR" when converted from EUR; null means USD or unknown
+  priceOriginal   Decimal?  // original EUR price before EUR→USD conversion
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
   customer        Customer     @relation(fields: [customerId], references: [id])

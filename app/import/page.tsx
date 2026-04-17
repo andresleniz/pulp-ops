@@ -15,6 +15,10 @@ interface ImportResult {
   withDestinationPort?: number
   withEkpMdp?: number
   deletedBeforeReimport?: number
+  // Europe currency routing (CRM import only)
+  europeEUR?: number
+  europeUSD?: number
+  europeRejectedCurrency?: number
 }
 
 function ImportCard({
@@ -36,6 +40,7 @@ function ImportCard({
   const [result, setResult] = useState<ImportResult | null>(null)
   const [fileColumns, setFileColumns] = useState<string[] | null>(null)
   const [extra, setExtra] = useState<string | null>(null)
+  const [parsedSample, setParsedSample] = useState<any[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
   const [replaceAll, setReplaceAll] = useState(false)
@@ -50,6 +55,7 @@ function ImportCard({
     setError(null)
     setExtra(null)
     setFileColumns(null)
+    setParsedSample(null)
     const fd = new FormData()
     fd.append("file", file)
     if (replaceAll) fd.append("replaceAll", "true")
@@ -60,6 +66,7 @@ function ImportCard({
       setResult(data.result)
       if (data.fileColumns) setFileColumns(data.fileColumns)
       if (data.sheetsProcessed) setExtra(`${data.sheetsProcessed} sheets processed`)
+      if (data.parsedSample) setParsedSample(data.parsedSample)
     } catch (err) {
       setError(String(err))
     } finally {
@@ -183,10 +190,40 @@ function ImportCard({
                 </div>
               </div>
             )}
+            {(result.europeEUR != null || result.europeUSD != null || result.europeRejectedCurrency != null) &&
+             (result.europeEUR! + result.europeUSD! + result.europeRejectedCurrency!) > 0 && (
+              <div className="bg-violet-50 border border-violet-100 rounded p-2 mb-3">
+                <p className="text-xs font-medium text-violet-700 mb-1">Europe currency routing</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { label: "EUR → USD", value: result.europeEUR ?? 0, ok: true },
+                    { label: "USD kept", value: result.europeUSD ?? 0, ok: true },
+                    { label: "Rejected", value: result.europeRejectedCurrency ?? 0, ok: (result.europeRejectedCurrency ?? 0) === 0 },
+                  ].map((s) => (
+                    <div key={s.label} className="bg-white rounded p-1.5 border border-violet-100">
+                      <p className="text-xs text-gray-500">{s.label}</p>
+                      <p className={`text-base font-semibold ${s.ok ? "text-violet-700" : "text-red-600"}`}>
+                        {s.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {fileColumns && (
               <div className="bg-gray-50 rounded p-2 mb-2">
                 <p className="text-xs font-medium text-gray-600 mb-1">Detected columns</p>
                 <p className="text-xs text-gray-500 font-mono break-all">{fileColumns.join(", ")}</p>
+              </div>
+            )}
+            {parsedSample && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded p-2 mb-2">
+                <p className="text-xs font-medium text-yellow-800 mb-1">Parser diagnostic — first 5 parsed rows</p>
+                {parsedSample.map((r, i) => (
+                  <p key={i} className="text-xs font-mono text-yellow-700">
+                    {i+1}. {r.country} | port: {r.destinationPort ?? "NULL"} | cur: {r.currency ?? "NULL"} | ref: {r.orderRef ?? "NULL"}
+                  </p>
+                ))}
               </div>
             )}
             {extra && <p className="text-xs text-gray-500 mb-2">{extra}</p>}

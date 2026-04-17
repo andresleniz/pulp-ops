@@ -3,6 +3,7 @@ import { logAudit } from "@/lib/audit"
 import { isManualPrice } from "@/lib/price-source"
 import { validateOrderWrite, evictManualOrders } from "@/lib/order-validation"
 import Decimal from "decimal.js"
+import { EUR_USD_RATE } from "@/lib/europe-queries"
 
 const COUNTRY_TO_MARKET: Record<string, string> = {
   // Asia Pacific
@@ -144,6 +145,8 @@ export interface CRMRow {
   mill: string | null
   comments: string | null
   destinationPort: string | null
+  /** Source currency from CRM ("EUR", "USD", or null). Used for EUR→USD conversion on Europe orders. */
+  currency?: string | null
 }
 
 export interface ImportResult {
@@ -160,6 +163,10 @@ export interface ImportResult {
   withDestinationPort: number
   withEkpMdp: number
   deletedBeforeReimport: number
+  // Europe currency routing diagnostics
+  europeEUR: number              // Europe rows converted EUR → USD
+  europeUSD: number              // Europe rows kept as USD
+  europeRejectedCurrency: number // Europe rows rejected: null, empty, or unsupported currency
 }
 
 export interface ImportOptions {
@@ -214,6 +221,9 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
     withDestinationPort: 0,
     withEkpMdp: 0,
     deletedBeforeReimport: 0,
+    europeEUR: 0,
+    europeUSD: 0,
+    europeRejectedCurrency: 0,
   }
 
   const markets = await prisma.market.findMany()
@@ -290,7 +300,44 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
       }
 
       const volume = row.volume && row.volume > 0 ? row.volume : null
-      const price = row.price && row.price > 0 ? row.price : null
+      const priceRaw = row.price && row.price > 0 ? row.price : null
+
+      // ── Per-row currency routing (Europe only) ────────────────────────────
+      // Europe rows MUST carry an explicit Currency column value.
+      // EUR → convert to USD using EUR_USD_RATE.
+      // USD → keep price as-is.
+      // null / empty / anything else → reject the row explicitly; do not assume.
+      // Non-Europe rows are never subject to currency conversion (pass through).
+      let price: number | null = priceRaw
+      let priceOriginalValue: number | null = null
+      let currencyValue: string | null = null
+
+      if (marketName === "Europe") {
+        // Normalise both ISO codes ("EUR", "USD") and text labels ("Euro", "US Dollar")
+        const raw = (row.currency ?? "").trim().toUpperCase()
+        const currencyNorm = raw === "EURO" ? "EUR" : raw === "US DOLLAR" ? "USD" : raw || null
+        if (currencyNorm === "EUR") {
+          price = priceRaw !== null ? priceRaw * EUR_USD_RATE : null
+          priceOriginalValue = priceRaw
+          currencyValue = "EUR"
+          result.europeEUR++
+        } else if (currencyNorm === "USD") {
+          // Price stays as priceRaw; record the explicit USD source
+          currencyValue = "USD"
+          result.europeUSD++
+        } else {
+          // null, empty, or any unsupported currency — reject, do not default
+          result.europeRejectedCurrency++
+          result.skipped++
+          const label = currencyNorm ?? "(missing)"
+          result.rejections.push(
+            `${customerName} ${yearMonth} ${fiberCode}: Europe row rejected — ` +
+            `currency "${label}" is not supported (expected EUR or USD)`
+          )
+          continue
+        }
+      }
+
       if (!volume || !price) { result.skipped++; continue }
 
       // Validate before any DB write
@@ -357,6 +404,8 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
             notes: row.comments ?? null,
             destinationPort: row.destinationPort?.trim() || null,
             country: countryName,
+            currency: currencyValue,
+            priceOriginal: priceOriginalValue !== null ? new Decimal(priceOriginalValue) : null,
           },
         })
         result.updated++
@@ -373,6 +422,8 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
             notes: row.comments ?? null,
             destinationPort: row.destinationPort?.trim() || null,
             country: countryName,
+            currency: currencyValue,
+            priceOriginal: priceOriginalValue !== null ? new Decimal(priceOriginalValue) : null,
           },
         })
         result.created++
@@ -427,14 +478,16 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
     newValue:
       `${result.imported} rows (${result.created} created, ${result.updated} updated, ` +
       `${result.evicted} manual rows evicted${replaceNote}) — ` +
-      `country: ${result.withCountry}, port: ${result.withDestinationPort}, EKP MDP: ${result.withEkpMdp}`,
+      `country: ${result.withCountry}, port: ${result.withDestinationPort}, EKP MDP: ${result.withEkpMdp}; ` +
+      `Europe currency: EUR=${result.europeEUR}, USD=${result.europeUSD}, rejected=${result.europeRejectedCurrency}`,
     changedBy: "Andrés",
   })
 
   console.log(
     `[CRM import] Done: ${result.imported} imported, ` +
     `country=${result.withCountry}, destinationPort=${result.withDestinationPort}, ` +
-    `ekpMdp=${result.withEkpMdp}`
+    `ekpMdp=${result.withEkpMdp}; ` +
+    `Europe currency: EUR=${result.europeEUR} USD=${result.europeUSD} rejected=${result.europeRejectedCurrency}`
   )
 
   return result
@@ -497,6 +550,9 @@ export async function importUSARows(rows: USARow[]): Promise<ImportResult> {
     withDestinationPort: 0,
     withEkpMdp: 0,
     deletedBeforeReimport: 0,
+    europeEUR: 0,
+    europeUSD: 0,
+    europeRejectedCurrency: 0,
   }
 
   const usaMarket = await prisma.market.findUnique({ where: { name: "USA" } })
