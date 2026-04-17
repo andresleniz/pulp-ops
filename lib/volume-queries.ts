@@ -83,21 +83,60 @@ export async function getVolumeChartData(params: {
   return result
 }
 
-// ── Europe country-level volume ──────────────────────────────────────────────
+// ── Europe country-level volume + weighted price ──────────────────────────────
 
 /**
- * Returns per-fiber volume chart data for the Europe market, grouped by country
- * instead of customer.  Uses `OrderRecord.country` populated at CRM import time.
+ * One aggregated data point for the Europe country chart.
+ * Covers a single (country, month, fiber) combination.
+ */
+export interface EuropeCountryPoint {
+  country: string
+  /** YYYY-MM */
+  month: string
+  /** Total ADT for this country/month/fiber. */
+  volume: number
+  /**
+   * Volume-weighted average price: sum(price * volume) / sum(volume).
+   * null only when volume is 0 (defensive — imported orders always have price > 0).
+   */
+  weightedPrice: number | null
+}
+
+/**
+ * Return value of getEuropeCountryLevelSeries().
+ * Contains both the VolumeChart-compatible series and the flat price data points.
+ */
+export interface EuropeSeriesResult {
+  /** Per-fiber volume series (country as series keys) — passed directly to VolumeChart. */
+  volumeSeriesByFiber: Record<string, VolumeChartSeries>
+  /** Per-fiber flat data points with volume + weighted price, one entry per country/month. */
+  pointsByFiber: Record<string, EuropeCountryPoint[]>
+  /** Sorted list of all country names present in the data. Empty when no country data exists. */
+  countries: string[]
+}
+
+const EMPTY_EUROPE_SERIES: EuropeSeriesResult = {
+  volumeSeriesByFiber: {},
+  pointsByFiber: {},
+  countries: [],
+}
+export { EMPTY_EUROPE_SERIES }
+
+/**
+ * Returns per-fiber volume and weighted-price data for the Europe market,
+ * grouped by country instead of customer.
  *
- * Shape is identical to VolumeChartSeries so the existing VolumeChart component
- * can be reused directly with country names as series keys.
+ * Uses `OrderRecord.country` which is populated by the CRM importer for Europe
+ * orders.  Orders with country=null (imported before the country field was added)
+ * are excluded — returns EMPTY_EUROPE_SERIES until a re-import is run.
  *
- * Orders without a country value are skipped (they pre-date the country field).
+ * Weighted price formula: sum(price × volume) / sum(volume) per country/month/fiber.
+ * Rows with zero volume are skipped to avoid divide-by-zero.
  */
 export async function getEuropeCountryLevelSeries(params: {
   marketId: string
   months: string[]
-}): Promise<Record<string, VolumeChartSeries>> {
+}): Promise<EuropeSeriesResult> {
   const { marketId, months } = params
 
   const orders = await prisma.orderRecord.findMany({
@@ -109,48 +148,75 @@ export async function getEuropeCountryLevelSeries(params: {
     select: {
       country: true,
       volume: true,
+      price: true,
       fiber: { select: { code: true } },
       cycle: { select: { month: true } },
     },
   })
 
+  if (orders.length === 0) return EMPTY_EUROPE_SERIES
+
+  const allCountries = [...new Set(orders.map((o) => o.country as string))].sort()
   const fiberCodes = [...new Set(orders.map((o) => o.fiber.code))]
-  const result: Record<string, VolumeChartSeries> = {}
+  const volumeSeriesByFiber: Record<string, VolumeChartSeries> = {}
+  const pointsByFiber: Record<string, EuropeCountryPoint[]> = {}
 
   for (const fiberCode of fiberCodes) {
     const fiberOrders = orders.filter((o) => o.fiber.code === fiberCode)
-    const countries = [...new Set(fiberOrders.map((o) => o.country as string))].sort()
+    const fiberCountries = [...new Set(fiberOrders.map((o) => o.country as string))].sort()
 
-    const monthMap: Record<string, Record<string, number>> = {}
+    // Accumulate volume and price×volume per (month, country)
+    type Acc = { totalVol: number; totalVal: number }
+    const acc: Record<string, Record<string, Acc>> = {}
     for (const m of months) {
-      monthMap[m] = {}
-      for (const c of countries) monthMap[m][c] = 0
+      acc[m] = {}
+      for (const c of fiberCountries) acc[m][c] = { totalVol: 0, totalVal: 0 }
     }
     for (const order of fiberOrders) {
       const country = order.country as string
       const month = order.cycle.month
-      if (monthMap[month]) {
-        monthMap[month][country] = (monthMap[month][country] ?? 0) + Number(order.volume)
-      }
+      const vol = Number(order.volume)
+      const price = Number(order.price)
+      if (!acc[month]) acc[month] = {}
+      if (!acc[month][country]) acc[month][country] = { totalVol: 0, totalVal: 0 }
+      acc[month][country].totalVol += vol
+      acc[month][country].totalVal += price * vol
     }
 
-    result[fiberCode] = {
+    // Build VolumeChartSeries for VolumeChart
+    volumeSeriesByFiber[fiberCode] = {
       data: months.map((m) => {
         const point: Record<string, string | number | null> = { month: m.slice(2) }
         let total = 0
-        for (const c of countries) {
-          const vol = monthMap[m]?.[c] || null
+        for (const c of fiberCountries) {
+          const vol = acc[m]?.[c]?.totalVol || null
           point[c] = vol
           total += vol ?? 0
         }
         point["Total"] = total > 0 ? total : null
         return point
       }),
-      customers: countries,
+      customers: fiberCountries,
     }
+
+    // Build EuropeCountryPoint[] for price table
+    const points: EuropeCountryPoint[] = []
+    for (const m of months) {
+      for (const c of fiberCountries) {
+        const { totalVol, totalVal } = acc[m]?.[c] ?? { totalVol: 0, totalVal: 0 }
+        if (totalVol === 0) continue
+        points.push({
+          country: c,
+          month: m,
+          volume: totalVol,
+          weightedPrice: totalVol > 0 ? totalVal / totalVol : null,
+        })
+      }
+    }
+    pointsByFiber[fiberCode] = points
   }
 
-  return result
+  return { volumeSeriesByFiber, pointsByFiber, countries: allCountries }
 }
 
 export interface EuropeCountryDrilldownEntry {

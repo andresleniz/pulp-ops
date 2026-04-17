@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { importCRMRows, CRMRow } from "@/lib/crm-importer"
+import { importCRMRows, CRMRow, ImportOptions } from "@/lib/crm-importer"
 
 // Accepted column name aliases for destination port — checked in order, first match wins.
 const DEST_PORT_ALIASES = ["Destination Port", "DestinationPort", "Port"]
@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData()
     const file = formData.get("file") as File | null
+    const replaceAll = formData.get("replaceAll") === "true"
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
@@ -46,6 +47,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No rows found in file" }, { status: 400 })
     }
 
+    // Step 5: Log actual column names so mismatches can be diagnosed
+    const fileColumns = Object.keys(rawRows[0])
+    console.log("[CRM import] File columns:", fileColumns.join(" | "))
+    console.log("[CRM import] Country column present:", fileColumns.includes("Country"))
+    console.log("[CRM import] Grade column present:", fileColumns.includes("Grade"))
+    console.log("[CRM import] replaceAll:", replaceAll)
+    const portCols = fileColumns.filter(k => DEST_PORT_ALIASES.some(a => a.toLowerCase() === k.toLowerCase()))
+    console.log("[CRM import] Destination port column found:", portCols.length > 0 ? portCols.join(", ") : "NONE")
+
     const rows: CRMRow[] = rawRows.map((r) => ({
       orderRef: (r["Order number"] as string) ?? null,
       year: r["Allocation year"] as string | number | null,
@@ -60,8 +70,9 @@ export async function POST(req: NextRequest) {
       destinationPort: pickDestinationPort(r),
     }))
 
-    const result = await importCRMRows(rows)
-    return NextResponse.json({ success: true, result })
+    const options: ImportOptions = { replaceAll }
+    const result = await importCRMRows(rows, options)
+    return NextResponse.json({ success: true, result, fileColumns })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

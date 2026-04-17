@@ -10,6 +10,11 @@ interface ImportResult {
   created: number
   updated: number
   errors: string[]
+  // Diagnostic counters (CRM import only)
+  withCountry?: number
+  withDestinationPort?: number
+  withEkpMdp?: number
+  deletedBeforeReimport?: number
 }
 
 function ImportCard({
@@ -18,18 +23,22 @@ function ImportCard({
   endpoint,
   accepts,
   whatItDoes,
+  showReplaceAll,
 }: {
   title: string
   description: string
   endpoint: string
   accepts: string
   whatItDoes: string[]
+  showReplaceAll?: boolean
 }) {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<ImportResult | null>(null)
+  const [fileColumns, setFileColumns] = useState<string[] | null>(null)
   const [extra, setExtra] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
+  const [replaceAll, setReplaceAll] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function handleSubmit(e: React.FormEvent) {
@@ -40,13 +49,16 @@ function ImportCard({
     setResult(null)
     setError(null)
     setExtra(null)
+    setFileColumns(null)
     const fd = new FormData()
     fd.append("file", file)
+    if (replaceAll) fd.append("replaceAll", "true")
     try {
       const res = await fetch(endpoint, { method: "POST", body: fd })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setResult(data.result)
+      if (data.fileColumns) setFileColumns(data.fileColumns)
       if (data.sheetsProcessed) setExtra(`${data.sheetsProcessed} sheets processed`)
     } catch (err) {
       setError(String(err))
@@ -87,12 +99,35 @@ function ImportCard({
             />
           </div>
 
+          {showReplaceAll && (
+            <label className="flex items-start gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={replaceAll}
+                onChange={(e) => setReplaceAll(e.target.checked)}
+                className="mt-0.5"
+              />
+              <div>
+                <span className="text-sm font-medium text-gray-800">Replace all existing data</span>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Deletes existing CRM orders for all market/month combinations in this file before
+                  importing. Required to fix country, destination port, and EKP MDP fields on
+                  historical data.
+                </p>
+              </div>
+            </label>
+          )}
+
           <button
             type="submit"
             disabled={loading || !fileName}
-            className="w-full bg-gray-900 text-white text-sm py-2.5 rounded-md hover:bg-gray-700 transition-colors disabled:opacity-50"
+            className={`w-full text-white text-sm py-2.5 rounded-md transition-colors disabled:opacity-50 ${
+              replaceAll
+                ? "bg-red-700 hover:bg-red-800"
+                : "bg-gray-900 hover:bg-gray-700"
+            }`}
           >
-            {loading ? "Importing..." : "Import"}
+            {loading ? "Importing..." : replaceAll ? "Replace & Re-import" : "Import"}
           </button>
         </form>
 
@@ -105,6 +140,13 @@ function ImportCard({
 
         {result && (
           <div className="mt-4">
+            {result.deletedBeforeReimport != null && result.deletedBeforeReimport > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded p-2 mb-3">
+                <p className="text-xs text-amber-700 font-medium">
+                  Replace mode: {result.deletedBeforeReimport} existing CRM orders deleted before import
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-2 mb-3">
               {[
                 { label: "Total rows", value: result.total },
@@ -122,6 +164,31 @@ function ImportCard({
                 </div>
               ))}
             </div>
+            {(result.withCountry != null || result.withDestinationPort != null || result.withEkpMdp != null) && (
+              <div className="bg-blue-50 border border-blue-100 rounded p-2 mb-3">
+                <p className="text-xs font-medium text-blue-700 mb-1">Field coverage (imported rows)</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { label: "with Country", value: result.withCountry ?? 0, ok: (result.withCountry ?? 0) > 0 },
+                    { label: "with Port", value: result.withDestinationPort ?? 0, ok: (result.withDestinationPort ?? 0) > 0 },
+                    { label: "EKP MDP", value: result.withEkpMdp ?? 0, ok: true },
+                  ].map((s) => (
+                    <div key={s.label} className="bg-white rounded p-1.5 border border-blue-100">
+                      <p className="text-xs text-gray-500">{s.label}</p>
+                      <p className={`text-base font-semibold ${s.ok ? "text-blue-700" : "text-amber-600"}`}>
+                        {s.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {fileColumns && (
+              <div className="bg-gray-50 rounded p-2 mb-2">
+                <p className="text-xs font-medium text-gray-600 mb-1">Detected columns</p>
+                <p className="text-xs text-gray-500 font-mono break-all">{fileColumns.join(", ")}</p>
+              </div>
+            )}
             {extra && <p className="text-xs text-gray-500 mb-2">{extra}</p>}
             {result.errors.length > 0 && (
               <div className="bg-red-50 rounded p-2 mt-2">
@@ -167,12 +234,14 @@ export default function ImportPage() {
         description="Standard CRM Excel export. Covers all markets except USA EKP detail."
         endpoint="/api/import"
         accepts=".xlsx — CRM export format"
+        showReplaceAll
         whatItDoes={[
           "Maps countries to markets (TW→Taiwan, AE→UAE, etc.)",
           "For US, maps mill codes to customers (PC1L→James Hardie, EA3E/EM1E→Sofidel)",
           "Creates missing customers, cycles and order records",
           "Updates existing orders if same reference already exists",
           "Updates MonthlyPrice with realized prices for charts",
+          "Stores country (Europe), destination port, and EKP MDP grade when present in file",
         ]}
       />
 

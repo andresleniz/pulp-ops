@@ -15,7 +15,8 @@ import { USACharts } from "@/components/markets/usa-charts"
 import { VolumeAdjustmentPanel } from "@/components/markets/volume-adjustment-panel"
 import { VolumeChart } from "@/components/markets/volume-chart"
 import { getEffectiveMonthlyPrices } from "@/lib/price-queries"
-import { getVolumeChartData, getMarketDestinationPortVolumes, getEuropeCountryLevelSeries, getEuropeCountryDrilldown } from "@/lib/volume-queries"
+import { getVolumeChartData, getMarketDestinationPortVolumes, getEuropeCountryLevelSeries, getEuropeCountryDrilldown, EMPTY_EUROPE_SERIES } from "@/lib/volume-queries"
+import type { EuropeCountryDrilldownEntry } from "@/lib/volume-queries"
 import { listMarketTasks } from "@/lib/market-tasks"
 import { getMarketNoteWithFallback } from "@/lib/market-notes"
 import { MarketTasksPanel } from "@/components/markets/market-tasks-panel"
@@ -175,12 +176,15 @@ export default async function MarketDetailPage({
 
   // ── Europe country-level charts (only fetched for Europe market) ─────────
   const isEurope = market.name === "Europe"
-  const [europeCountrySeries, europeCountryDrilldown] = isEurope
+  const [europeSeriesResult, europeCountryDrilldown] = isEurope
     ? await Promise.all([
         getEuropeCountryLevelSeries({ marketId: market.id, months: chartMonths }),
         getEuropeCountryDrilldown({ marketId: market.id, months: chartMonths }),
       ])
-    : [{}, {}]
+    : [EMPTY_EUROPE_SERIES, {} as Record<string, EuropeCountryDrilldownEntry[]>]
+
+  // true when country data is present (populated by re-import)
+  const hasEuropeCountryData = europeSeriesResult.countries.length > 0
 
   // ── Destination-port volume (nullable — empty when not yet in CRM data) ──
   const destPortVolumes = await getMarketDestinationPortVolumes({ marketId: market.id })
@@ -286,18 +290,37 @@ export default async function MarketDetailPage({
                 </Card>
               )}
               {isEurope ? (
-                Object.keys(europeCountrySeries).length > 0 && (
+                hasEuropeCountryData ? (
                   <Card>
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm font-medium">Volume by Country — Last 12 Months</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <EuropeVolumeSection
-                        seriesByFiber={europeCountrySeries}
+                        series={europeSeriesResult}
                         drilldown={europeCountryDrilldown}
                       />
                     </CardContent>
                   </Card>
+                ) : (
+                  Object.keys(volumeChartByFiber).length > 0 && (
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">Volume History — Last 12 Months</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-xs text-amber-700 bg-amber-50 rounded px-3 py-2 mb-4">
+                          Country-level view not yet available — re-import the CRM file with
+                          &ldquo;Replace all existing data&rdquo; to enable it. Showing customer breakdown.
+                        </p>
+                        <div className="space-y-6">
+                          {Object.entries(volumeChartByFiber).map(([fiberCode, { data, customers }]) => (
+                            <VolumeChart key={fiberCode} fiberCode={fiberCode} data={data} customers={customers} />
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
                 )
               ) : (
                 Object.keys(volumeChartByFiber).length > 0 && (

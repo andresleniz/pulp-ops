@@ -155,6 +155,22 @@ export interface ImportResult {
   evicted: number
   errors: string[]
   rejections: string[]
+  // Diagnostic counters — verify field population after re-import
+  withCountry: number
+  withDestinationPort: number
+  withEkpMdp: number
+  deletedBeforeReimport: number
+}
+
+export interface ImportOptions {
+  /**
+   * When true: before importing, delete all existing CRM OrderRecord rows for
+   * every (marketId, month) pair present in the incoming batch.
+   *
+   * Required for re-imports to correctly populate `country`, `destinationPort`,
+   * and `fiberId` (EKP MDP) — fields that were absent from historical imports.
+   */
+  replaceAll?: boolean
 }
 
 /**
@@ -184,7 +200,7 @@ async function ensureAllMarketCycles(
   }
 }
 
-export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
+export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Promise<ImportResult> {
   const result: ImportResult = {
     total: rows.length,
     imported: 0,
@@ -194,11 +210,45 @@ export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
     evicted: 0,
     errors: [],
     rejections: [],
+    withCountry: 0,
+    withDestinationPort: 0,
+    withEkpMdp: 0,
+    deletedBeforeReimport: 0,
   }
 
   const markets = await prisma.market.findMany()
   const fibers = await prisma.fiber.findMany()
   const customers = await prisma.customer.findMany()
+
+  // ── replaceAll pre-deletion ───────────────────────────────────────────────
+  // When replaceAll=true: collect all valid (marketId, month) pairs in this
+  // batch, then delete existing CRM orders for those pairs so re-import writes
+  // fresh rows with correct country, destinationPort, and fiberId values.
+  if (options?.replaceAll) {
+    const pairsToDelete = new Map<string, { marketId: string; month: string }>()
+    for (const row of rows) {
+      const yearMonth = row.year && row.month ? toYearMonth(row.year, row.month) : null
+      if (!yearMonth) continue
+      const marketName = row.country ? COUNTRY_TO_MARKET[row.country] : null
+      if (!marketName) continue
+      const market = markets.find((m) => m.name === marketName)
+      if (!market) continue
+      pairsToDelete.set(`${market.id}:::${yearMonth}`, { marketId: market.id, month: yearMonth })
+    }
+
+    let deleted = 0
+    for (const { marketId, month } of pairsToDelete.values()) {
+      const del = await prisma.orderRecord.deleteMany({
+        where: { source: "CRM", cycle: { marketId, month } },
+      })
+      deleted += del.count
+    }
+    result.deletedBeforeReimport = deleted
+    console.log(
+      `[CRM replaceAll] Deleted ${deleted} existing CRM orders across ` +
+      `${pairsToDelete.size} market/month pair(s)`
+    )
+  }
 
   // Tracks which months have already had cycles created for all markets this run
   const globallyInitializedMonths = new Set<string>()
@@ -357,18 +407,35 @@ export async function importCRMRows(rows: CRMRow[]): Promise<ImportResult> {
         }
       }
 
+      // Diagnostic counters
+      if (countryName) result.withCountry++
+      if (row.destinationPort?.trim()) result.withDestinationPort++
+      if (fiberCode === "EKP MDP") result.withEkpMdp++
+
       result.imported++
     } catch (err) {
       result.errors.push(`Row error: ${String(err)}`)
     }
   }
 
+  const replaceNote = options?.replaceAll
+    ? `, replaceAll: ${result.deletedBeforeReimport} deleted first`
+    : ""
   await logAudit({
     entity: "CRMImport", entityId: "bulk", field: "import",
     oldValue: null,
-    newValue: `${result.imported} rows (${result.created} created, ${result.updated} updated, ${result.evicted} manual rows evicted)`,
+    newValue:
+      `${result.imported} rows (${result.created} created, ${result.updated} updated, ` +
+      `${result.evicted} manual rows evicted${replaceNote}) — ` +
+      `country: ${result.withCountry}, port: ${result.withDestinationPort}, EKP MDP: ${result.withEkpMdp}`,
     changedBy: "Andrés",
   })
+
+  console.log(
+    `[CRM import] Done: ${result.imported} imported, ` +
+    `country=${result.withCountry}, destinationPort=${result.withDestinationPort}, ` +
+    `ekpMdp=${result.withEkpMdp}`
+  )
 
   return result
 }
@@ -426,6 +493,10 @@ export async function importUSARows(rows: USARow[]): Promise<ImportResult> {
     evicted: 0,
     errors: [],
     rejections: [],
+    withCountry: 0,
+    withDestinationPort: 0,
+    withEkpMdp: 0,
+    deletedBeforeReimport: 0,
   }
 
   const usaMarket = await prisma.market.findUnique({ where: { name: "USA" } })
