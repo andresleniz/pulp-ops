@@ -19,6 +19,9 @@ interface ImportResult {
   europeEUR?: number
   europeUSD?: number
   europeRejectedCurrency?: number
+  // Europe net-price tracking
+  europeIsNetPrice?: number
+  europeIsNotNetPrice?: number
 }
 
 function ImportCard({
@@ -221,9 +224,25 @@ function ImportCard({
                 <p className="text-xs font-medium text-yellow-800 mb-1">Parser diagnostic — first 5 parsed rows</p>
                 {parsedSample.map((r, i) => (
                   <p key={i} className="text-xs font-mono text-yellow-700">
-                    {i+1}. {r.country} | port: {r.destinationPort ?? "NULL"} | cur: {r.currency ?? "NULL"} | ref: {r.orderRef ?? "NULL"}
+                    {i+1}. {r.country} | port: {r.destinationPort ?? "NULL"} | cur: {r.currency ?? "NULL"} | netPrice: {r.netPrice ?? "NULL"} | ref: {r.orderRef ?? "NULL"}
                   </p>
                 ))}
+              </div>
+            )}
+            {(result.europeIsNetPrice != null || result.europeIsNotNetPrice != null) && (
+              <div className="bg-green-50 border border-green-100 rounded p-2 mb-3">
+                <p className="text-xs font-medium text-green-700 mb-1">Europe net-price flag (isNetPrice)</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: "isNetPrice = true", value: result.europeIsNetPrice ?? 0, ok: (result.europeIsNetPrice ?? 0) > 0 },
+                    { label: "isNetPrice = false", value: result.europeIsNotNetPrice ?? 0, ok: (result.europeIsNotNetPrice ?? 0) === 0 },
+                  ].map(s => (
+                    <div key={s.label} className="bg-white rounded p-1.5 border border-green-100">
+                      <p className="text-xs text-gray-500">{s.label}</p>
+                      <p className={`text-base font-semibold ${s.ok ? "text-green-700" : "text-amber-600"}`}>{s.value}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             {extra && <p className="text-xs text-gray-500 mb-2">{extra}</p>}
@@ -256,6 +275,169 @@ function ImportCard({
   )
 }
 
+// ── Diagnostic panel ─────────────────────────────────────────────────────────
+
+function DiagnoseCard() {
+  const [loading, setLoading] = useState(false)
+  const [report, setReport] = useState<any | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [fileName, setFileName] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const file = fileRef.current?.files?.[0]
+    if (!file) return
+    setLoading(true)
+    setReport(null)
+    setError(null)
+    const fd = new FormData()
+    fd.append("file", file)
+    try {
+      const res = await fetch("/api/import-diagnose", { method: "POST", body: fd })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setReport(data)
+    } catch (err) {
+      setError(String(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Card className="mb-6 border-amber-200">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium text-amber-800">
+          Inspect File — Parser Diagnostic
+        </CardTitle>
+        <p className="text-xs text-gray-500 mt-1">
+          Upload a CRM file here to inspect its exact headers and raw column values
+          without importing. Use this to verify Net Price and Destination port parsing.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div
+            className="border-2 border-dashed border-amber-200 rounded-lg p-4 text-center cursor-pointer hover:border-amber-400 transition-colors"
+            onClick={() => fileRef.current?.click()}
+          >
+            {fileName
+              ? <p className="text-sm font-medium text-gray-900">{fileName}</p>
+              : <p className="text-sm text-gray-500">Click to select CRM file (.xlsx)</p>}
+            <input ref={fileRef} type="file" accept=".xlsx" className="hidden"
+              onChange={e => setFileName(e.target.files?.[0]?.name ?? null)} />
+          </div>
+          <button type="submit" disabled={loading || !fileName}
+            className="w-full bg-amber-700 hover:bg-amber-800 disabled:opacity-50 text-white text-sm py-2 rounded-md transition-colors">
+            {loading ? "Inspecting…" : "Inspect file (no import)"}
+          </button>
+        </form>
+
+        {error && (
+          <div className="mt-3 bg-red-50 border border-red-200 rounded p-3">
+            <p className="text-xs text-red-700 font-mono">{error}</p>
+          </div>
+        )}
+
+        {report && (
+          <div className="mt-4 space-y-3 text-xs font-mono">
+
+            {/* File / sheet */}
+            <div className="bg-gray-50 rounded p-2 space-y-0.5">
+              <p><span className="text-gray-500">file:</span> {report.file}</p>
+              <p><span className="text-gray-500">sheets:</span> {report.sheets?.join(", ")}</p>
+              <p><span className="text-gray-500">selected:</span> {report.selectedSheet}</p>
+              <p><span className="text-gray-500">total rows:</span> {report.totalRows}</p>
+              <p><span className="text-gray-500">header row index:</span> {report.headerRowIndex}</p>
+            </div>
+
+            {/* Column resolution */}
+            <div className="bg-blue-50 rounded p-2 space-y-0.5">
+              <p className="font-semibold text-blue-800 mb-1">Column resolution</p>
+              {Object.entries(report.columnResolution ?? {}).map(([k, v]) =>
+                k === "netPriceAliases" ? null : (
+                  <p key={k}>
+                    <span className="text-blue-600">{k}:</span>{" "}
+                    {v == null
+                      ? <span className="text-red-600 font-bold">NOT FOUND</span>
+                      : <span className="text-green-700">&quot;{String(v)}&quot;</span>}
+                  </p>
+                )
+              )}
+            </div>
+
+            {/* Raw header bytes for price/net columns */}
+            {report.rawHeaderBytes?.length > 0 && (
+              <div className="bg-yellow-50 rounded p-2">
+                <p className="font-semibold text-yellow-800 mb-1">
+                  Raw header bytes (price / net columns)
+                </p>
+                {report.rawHeaderBytes.map((x: any, i: number) => (
+                  <div key={i} className="mb-1">
+                    <p><span className="text-gray-500">col {x.col}:</span> raw=&quot;{x.raw}&quot; → normalized=&quot;{x.normalized}&quot;</p>
+                    <p className="text-yellow-700 text-[10px] break-all">{x.bytes}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* All price-related headers */}
+            {report.priceRelatedHeaders?.length > 0 && (
+              <div className="bg-gray-50 rounded p-2">
+                <p className="font-semibold text-gray-700 mb-1">
+                  All columns containing &quot;price&quot; or &quot;net&quot;
+                </p>
+                {report.priceRelatedHeaders.map((x: any, i: number) => (
+                  <p key={i}>col {x.col}: normalized=&quot;{x.normalized}&quot;  raw=&quot;{x.raw}&quot;</p>
+                ))}
+              </div>
+            )}
+
+            {/* Header scan log */}
+            <details className="bg-gray-50 rounded p-2">
+              <summary className="cursor-pointer text-gray-600 font-semibold">
+                Header scan log (rows 0–9)
+              </summary>
+              <div className="mt-1 space-y-0.5">
+                {report.headerScanLog?.map((line: string, i: number) => (
+                  <p key={i} className={line.includes("HEADER ROW") ? "text-green-700 font-bold" : "text-gray-500"}>
+                    {line}
+                  </p>
+                ))}
+              </div>
+            </details>
+
+            {/* Sample rows */}
+            {report.sampleRows?.length > 0 && (
+              <div className="bg-gray-50 rounded p-2">
+                <p className="font-semibold text-gray-700 mb-1">First {report.sampleRows.length} data rows</p>
+                {report.sampleRows.map((row: any, i: number) => (
+                  <div key={i} className="mb-2 border-b border-gray-200 pb-1 last:border-0">
+                    <p className="text-gray-600 font-semibold">Row {i + 1}</p>
+                    {Object.entries(row).map(([col, info]: [string, any]) => (
+                      <p key={col} className={
+                        (col.includes("net") || col.includes("price"))
+                          ? "text-blue-700"
+                          : "text-gray-600"
+                      }>
+                        &nbsp;&nbsp;{col}: {JSON.stringify(info.value)}{" "}
+                        <span className="text-gray-400">[{info.type}]</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function ImportPage() {
   return (
     <div className="p-6 max-w-2xl mx-auto">
@@ -265,6 +447,8 @@ export default function ImportPage() {
           Import realized orders and prices from external files
         </p>
       </div>
+
+      <DiagnoseCard />
 
       <ImportCard
         title="CRM Import — All Markets"

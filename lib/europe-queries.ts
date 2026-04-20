@@ -9,6 +9,14 @@
  *
  * EUR → USD rate used at import time (crm-importer.ts).
  * All prices stored in the DB are already USD after a re-import.
+ *
+ * ── Europe price policy ──────────────────────────────────────────────────────
+ * All Europe reports use NET prices only.  `OrderRecord.price` is the
+ * authoritative net price for every Europe CRM order — the importer prefers
+ * the dedicated "net price" column over the generic "price" column, and never
+ * silently falls back to a list price.  Use `selectEuropeNetPrice()` in every
+ * Europe query instead of reading `order.price` directly so the commitment is
+ * explicit and auditable.
  */
 
 import { prisma } from "@/lib/prisma"
@@ -19,6 +27,21 @@ import type { VolumeChartSeries } from "@/lib/volume-queries"
 
 /** EUR → USD conversion rate applied at CRM import time for Europe orders. */
 export const EUR_USD_RATE = 1.09
+
+// ── Europe price selection rule ───────────────────────────────────────────────
+
+/**
+ * Returns the net price (USD/ADT) for a confirmed Europe net-price row.
+ *
+ * Every caller of this function must have already filtered the Prisma query with
+ * `isNetPrice: true`.  That WHERE clause is what guarantees the price is a real
+ * net price — this helper just reads the stored value cleanly.
+ *
+ * Do NOT call this on rows fetched without the `isNetPrice: true` filter.
+ */
+export function selectEuropeNetPrice(order: { price: { toString(): string } | number }): number {
+  return Number(order.price)
+}
 
 // ── Country overview ─────────────────────────────────────────────────────────
 
@@ -48,7 +71,7 @@ export async function getEuropeCountrySummaries(params: {
   if (months?.length) cycleWhere.month = { in: months }
 
   const orders = await prisma.orderRecord.findMany({
-    where: { ...CRM_FILTER, country: { not: null }, cycle: cycleWhere },
+    where: { ...CRM_FILTER, isNetPrice: true, country: { not: null }, cycle: cycleWhere },
     select: {
       country: true,
       volume: true,
@@ -65,7 +88,7 @@ export async function getEuropeCountrySummaries(params: {
   for (const order of orders) {
     const country = order.country as string
     const vol = Number(order.volume)
-    const price = Number(order.price)
+    const price = selectEuropeNetPrice(order)  // net price only
     if (!map.has(country)) {
       map.set(country, { totalVol: 0, totalVal: 0, customers: new Set(), latestMonth: order.cycle.month })
     }
@@ -101,7 +124,7 @@ export async function getEuropeCountryVolumeSeries(params: {
   const { marketId, country, months } = params
 
   const orders = await prisma.orderRecord.findMany({
-    where: { ...CRM_FILTER, country, cycle: { marketId, month: { in: months } } },
+    where: { ...CRM_FILTER, isNetPrice: true, country, cycle: { marketId, month: { in: months } } },
     include: { fiber: true, customer: true, cycle: true },
   })
 
@@ -169,7 +192,7 @@ export async function getEuropeCountryPriceSeries(params: {
   const { marketId, country, months } = params
 
   const orders = await prisma.orderRecord.findMany({
-    where: { ...CRM_FILTER, country, cycle: { marketId, month: { in: months } } },
+    where: { ...CRM_FILTER, isNetPrice: true, country, cycle: { marketId, month: { in: months } } },
     select: {
       volume: true,
       price: true,
@@ -200,7 +223,7 @@ export async function getEuropeCountryPriceSeries(params: {
       const name = order.customer.name
       const month = order.cycle.month
       const vol = Number(order.volume)
-      const price = Number(order.price)
+      const price = selectEuropeNetPrice(order)  // net price only
       if (monthMap[month]?.[name]) {
         monthMap[month][name].vol += vol
         monthMap[month][name].val += price * vol
@@ -225,7 +248,7 @@ export async function getEuropeCountryPriceSeries(params: {
     customer: o.customer.name,
     fiber: o.fiber.code,
     volume: Number(o.volume),
-    price: Number(o.price),
+    price: selectEuropeNetPrice(o),  // net price only
   }))
 
   return { chartDataByFiber, allPoints }

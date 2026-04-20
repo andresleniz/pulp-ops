@@ -30,6 +30,14 @@ const DEST_PORT_ALIASES = [
 const CURRENCY_ALIASES = ["currency", "document currency", "transaction currency"]
 
 /**
+ * Net price column aliases (normalised).  When the CRM export contains any of
+ * these columns they are mapped to CRMRow.netPrice.  For Europe orders the
+ * importer prefers this value over the generic "price" column so that net
+ * prices are always used in Europe reporting.
+ */
+const NET_PRICE_ALIASES = ["net price", "net", "price net", "net unit price"]
+
+/**
  * Returns the first non-empty string value found under any of the given aliases.
  * Because all keys in rawRows are normalised, aliases must also be normalised.
  */
@@ -37,6 +45,18 @@ function pickColumn(r: Record<string, unknown>, aliases: string[]): string | nul
   for (const alias of aliases) {
     const val = r[alias]
     if (typeof val === "string" && val.trim()) return val.trim()
+  }
+  return null
+}
+
+/**
+ * Returns the first numeric value found under any of the given aliases.
+ * xlsx parses numeric cells as JavaScript numbers so no string conversion is needed.
+ */
+function pickNumericColumn(r: Record<string, unknown>, aliases: string[]): number | null {
+  for (const alias of aliases) {
+    const val = r[alias]
+    if (typeof val === "number" && !isNaN(val)) return val
   }
   return null
 }
@@ -140,11 +160,13 @@ export async function POST(req: NextRequest) {
     const fileColumns = headerRow.filter((h) => h)
     const portResolved = DEST_PORT_ALIASES.find((a) => headerRow.includes(a)) ?? "NONE"
     const currencyResolved = CURRENCY_ALIASES.find((a) => headerRow.includes(a)) ?? "NONE"
+    const netPriceResolved = NET_PRICE_ALIASES.find((a) => headerRow.includes(a)) ?? "NONE"
 
     console.log("[CRM import] Header row detected at row index:", headerRowIndex)
     console.log("[CRM import] Detected headers:", fileColumns.join(" | "))
     console.log("[CRM import] destinationPort column resolved to:", portResolved)
     console.log("[CRM import] currency column resolved to:", currencyResolved)
+    console.log("[CRM import] net price column resolved to:", netPriceResolved)
     console.log("[CRM import] country present:", headerRow.includes("country"))
     console.log("[CRM import] grade present:", headerRow.includes("grade"))
     console.log("[CRM import] replaceAll:", replaceAll)
@@ -164,6 +186,8 @@ export async function POST(req: NextRequest) {
       comments:  r["comments"] as string | null,
       destinationPort: pickColumn(r, DEST_PORT_ALIASES),
       currency:        pickColumn(r, CURRENCY_ALIASES),
+      // For Europe orders: net price column takes priority over generic "price"
+      netPrice:        pickNumericColumn(r, NET_PRICE_ALIASES),
     }))
 
     // ── Diagnostic sample (temporary — remove after port fix verified) ─────────
@@ -171,6 +195,7 @@ export async function POST(req: NextRequest) {
       country: r.country,
       destinationPort: r.destinationPort,
       currency: r.currency,
+      netPrice: r.netPrice,
       orderRef: r.orderRef,
       grade: r.grade,
     }))

@@ -98,11 +98,11 @@ export default async function EuropeMarketPage({
             sub: "ADT",
           },
           {
-            label: "Avg Price",
+            label: "Avg Net Price",
             value: avgWeightedPrice !== null
               ? `$${avgWeightedPrice.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
               : "—",
-            sub: "USD/ADT",
+            sub: avgWeightedPrice !== null ? "USD/ADT" : "re-import required",
           },
           {
             label: "Countries",
@@ -175,12 +175,16 @@ export default async function EuropeMarketPage({
                           {s.totalVolume.toLocaleString("en-US", { maximumFractionDigits: 0 })}
                         </span>
                       </div>
-                      {s.weightedPrice !== null && (
+                      {s.weightedPrice !== null ? (
                         <div className="flex items-center gap-1 bg-gray-100 rounded px-2 py-0.5">
-                          <span className="text-xs text-gray-500">$/ADT</span>
+                          <span className="text-xs text-gray-500">net $/ADT</span>
                           <span className="text-xs font-medium text-gray-900 tabular-nums">
                             {s.weightedPrice.toLocaleString("en-US", { maximumFractionDigits: 0 })}
                           </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 bg-amber-50 rounded px-2 py-0.5">
+                          <span className="text-xs text-amber-600">no net price data</span>
                         </div>
                       )}
                     </div>

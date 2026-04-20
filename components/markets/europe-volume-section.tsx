@@ -46,13 +46,13 @@ export function EuropeVolumeSection({ series, drilldown }: Props) {
       {/* Country summary table with weighted price + drill-down */}
       {sortedCountries.length > 0 && (
         <div>
-          <p className="text-xs text-gray-500 font-medium mb-2">Volume & Price by Country (all periods)</p>
+          <p className="text-xs text-gray-500 font-medium mb-2">Volume & Net Price by Country (all periods)</p>
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs text-gray-400 border-b">
                 <th className="text-left pb-2 font-medium">Country</th>
                 <th className="text-right pb-2 font-medium">Total ADT</th>
-                <th className="text-right pb-2 font-medium">Avg Price (USD/ADT)</th>
+                <th className="text-right pb-2 font-medium">Avg Net Price (USD/ADT)</th>
                 <th className="pb-2 w-8" />
               </tr>
             </thead>
@@ -76,7 +76,7 @@ export function EuropeVolumeSection({ series, drilldown }: Props) {
                       <td className="py-1.5 text-right tabular-nums font-medium">
                         {weightedPrice !== null
                           ? `$${weightedPrice.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-                          : "—"}
+                          : <span className="text-xs text-amber-600 font-normal">no net data</span>}
                       </td>
                       <td className="py-1.5 text-right">
                         <button
@@ -100,7 +100,7 @@ export function EuropeVolumeSection({ series, drilldown }: Props) {
                                 <th className="text-left py-1.5 pl-2 font-medium">Customer</th>
                                 <th className="text-left py-1.5 font-medium">Month</th>
                                 <th className="text-right py-1.5 font-medium">ADT</th>
-                                <th className="text-right py-1.5 pr-2 font-medium">USD/ADT</th>
+                                <th className="text-right py-1.5 pr-2 font-medium">Net USD/ADT</th>
                               </tr>
                             </thead>
                             <tbody>

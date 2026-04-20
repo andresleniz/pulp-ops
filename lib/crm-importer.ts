@@ -147,6 +147,13 @@ export interface CRMRow {
   destinationPort: string | null
   /** Source currency from CRM ("EUR", "USD", or null). Used for EUR→USD conversion on Europe orders. */
   currency?: string | null
+  /**
+   * Net price from a dedicated "net price" column in the CRM export.
+   * When provided for Europe orders, takes priority over `price` (which may be
+   * a list price).  Undefined / null means no dedicated net-price column was
+   * found in the file — the generic `price` column is used as a fallback.
+   */
+  netPrice?: number | null
 }
 
 export interface ImportResult {
@@ -167,6 +174,9 @@ export interface ImportResult {
   europeEUR: number              // Europe rows converted EUR → USD
   europeUSD: number              // Europe rows kept as USD
   europeRejectedCurrency: number // Europe rows rejected: null, empty, or unsupported currency
+  // Europe net-price tracking
+  europeIsNetPrice: number       // Europe rows stored with isNetPrice = true (from "net price" column)
+  europeIsNotNetPrice: number    // Europe rows stored with isNetPrice = false (from generic "price" column)
 }
 
 export interface ImportOptions {
@@ -224,6 +234,8 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
     europeEUR: 0,
     europeUSD: 0,
     europeRejectedCurrency: 0,
+    europeIsNetPrice: 0,
+    europeIsNotNetPrice: 0,
   }
 
   const markets = await prisma.market.findMany()
@@ -300,7 +312,28 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
       }
 
       const volume = row.volume && row.volume > 0 ? row.volume : null
-      const priceRaw = row.price && row.price > 0 ? row.price : null
+
+      // ── Europe net-price selection ─────────────────────────────────────────
+      // isNetPrice = true  → row came from the dedicated "net price" CRM column.
+      //                      Europe queries filter WHERE isNetPrice = true only,
+      //                      so only these rows appear in net-price reports.
+      // isNetPrice = false → row came from the generic "price" column (list price
+      //                      or unknown).  Stored in DB but excluded from all
+      //                      Europe net-price views.  No fallback substitution.
+      const netPriceRaw = row.netPrice && row.netPrice > 0 ? row.netPrice : null
+      const genericPriceRaw = row.price && row.price > 0 ? row.price : null
+
+      // Whether this specific row carries a true net price
+      const isNetPrice = marketName === "Europe" && netPriceRaw !== null
+
+      // Price to write into OrderRecord.price — net price when confirmed, else generic
+      const priceRaw = isNetPrice ? netPriceRaw! : genericPriceRaw
+
+      // Track net vs non-net for Europe diagnostic counters
+      if (marketName === "Europe") {
+        if (isNetPrice) result.europeIsNetPrice++
+        else result.europeIsNotNetPrice++
+      }
 
       // ── Per-row currency routing (Europe only) ────────────────────────────
       // Europe rows MUST carry an explicit Currency column value.
@@ -406,6 +439,7 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
             country: countryName,
             currency: currencyValue,
             priceOriginal: priceOriginalValue !== null ? new Decimal(priceOriginalValue) : null,
+            isNetPrice,
           },
         })
         result.updated++
@@ -424,6 +458,7 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
             country: countryName,
             currency: currencyValue,
             priceOriginal: priceOriginalValue !== null ? new Decimal(priceOriginalValue) : null,
+            isNetPrice,
           },
         })
         result.created++
@@ -479,7 +514,8 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
       `${result.imported} rows (${result.created} created, ${result.updated} updated, ` +
       `${result.evicted} manual rows evicted${replaceNote}) — ` +
       `country: ${result.withCountry}, port: ${result.withDestinationPort}, EKP MDP: ${result.withEkpMdp}; ` +
-      `Europe currency: EUR=${result.europeEUR}, USD=${result.europeUSD}, rejected=${result.europeRejectedCurrency}`,
+      `Europe currency: EUR=${result.europeEUR}, USD=${result.europeUSD}, rejected=${result.europeRejectedCurrency}; ` +
+      `Europe isNetPrice: true=${result.europeIsNetPrice}, false=${result.europeIsNotNetPrice}`,
     changedBy: "Andrés",
   })
 
@@ -487,7 +523,8 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
     `[CRM import] Done: ${result.imported} imported, ` +
     `country=${result.withCountry}, destinationPort=${result.withDestinationPort}, ` +
     `ekpMdp=${result.withEkpMdp}; ` +
-    `Europe currency: EUR=${result.europeEUR} USD=${result.europeUSD} rejected=${result.europeRejectedCurrency}`
+    `Europe currency: EUR=${result.europeEUR} USD=${result.europeUSD} rejected=${result.europeRejectedCurrency}; ` +
+    `Europe isNetPrice: true=${result.europeIsNetPrice} false=${result.europeIsNotNetPrice}`
   )
 
   return result
@@ -553,6 +590,8 @@ export async function importUSARows(rows: USARow[]): Promise<ImportResult> {
     europeEUR: 0,
     europeUSD: 0,
     europeRejectedCurrency: 0,
+    europeIsNetPrice: 0,
+    europeIsNotNetPrice: 0,
   }
 
   const usaMarket = await prisma.market.findUnique({ where: { name: "USA" } })

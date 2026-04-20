@@ -130,7 +130,10 @@ export { EMPTY_EUROPE_SERIES }
  * orders.  Orders with country=null (imported before the country field was added)
  * are excluded — returns EMPTY_EUROPE_SERIES until a re-import is run.
  *
- * Weighted price formula: sum(price × volume) / sum(volume) per country/month/fiber.
+ * Europe price policy: net prices only.
+ * `OrderRecord.price` is the authoritative net price for Europe CRM orders
+ * (see `selectEuropeNetPrice` in europe-queries.ts for the full policy).
+ * Weighted net price formula: sum(netPrice × volume) / sum(volume) per country/month/fiber.
  * Rows with zero volume are skipped to avoid divide-by-zero.
  */
 export async function getEuropeCountryLevelSeries(params: {
@@ -142,6 +145,7 @@ export async function getEuropeCountryLevelSeries(params: {
   const orders = await prisma.orderRecord.findMany({
     where: {
       ...CRM_FILTER,
+      isNetPrice: true,
       country: { not: null },
       cycle: { marketId, month: { in: months } },
     },
@@ -176,11 +180,13 @@ export async function getEuropeCountryLevelSeries(params: {
       const country = order.country as string
       const month = order.cycle.month
       const vol = Number(order.volume)
-      const price = Number(order.price)
+      // Net price only — OrderRecord.price is the authoritative net price for Europe
+      // (see selectEuropeNetPrice in europe-queries.ts for the full policy)
+      const netPrice = Number(order.price)
       if (!acc[month]) acc[month] = {}
       if (!acc[month][country]) acc[month][country] = { totalVol: 0, totalVal: 0 }
       acc[month][country].totalVol += vol
-      acc[month][country].totalVal += price * vol
+      acc[month][country].totalVal += netPrice * vol
     }
 
     // Build VolumeChartSeries for VolumeChart
@@ -245,6 +251,7 @@ export async function getEuropeCountryDrilldown(params: {
   const orders = await prisma.orderRecord.findMany({
     where: {
       ...CRM_FILTER,
+      isNetPrice: true,
       country: { not: null },
       cycle: cycleWhere,
     },
@@ -266,6 +273,7 @@ export async function getEuropeCountryDrilldown(params: {
       customer: order.customer.name,
       month: order.cycle.month,
       volume: Number(order.volume),
+      // Net price only — OrderRecord.price is the authoritative net price for Europe
       price: Number(order.price),
     })
   }

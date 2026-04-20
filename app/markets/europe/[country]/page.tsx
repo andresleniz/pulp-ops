@@ -120,11 +120,11 @@ export default async function EuropeCountryPage({
         )}
 
         {/* Price charts */}
-        {Object.keys(chartDataByFiber).length > 0 && (
+        {Object.keys(chartDataByFiber).length > 0 ? (
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">
-                Price History — Last 12 Months (USD/ADT)
+                Net Price History — Last 12 Months (USD/ADT)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -138,13 +138,22 @@ export default async function EuropeCountryPage({
               ))}
             </CardContent>
           </Card>
+        ) : (
+          <Card>
+            <CardContent className="pt-6 pb-6">
+              <p className="text-sm text-amber-700 bg-amber-50 rounded px-3 py-2">
+                No net price data available for {country}. Re-import the CRM file with a
+                dedicated &ldquo;Net Price&rdquo; column to populate net-price reports.
+              </p>
+            </CardContent>
+          </Card>
         )}
 
         {/* Order detail table */}
         {sortedPoints.length > 0 && (
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Order Detail</CardTitle>
+              <CardTitle className="text-sm font-medium">Net Price Order Detail</CardTitle>
             </CardHeader>
             <CardContent>
               <table className="w-full text-sm">
@@ -154,7 +163,7 @@ export default async function EuropeCountryPage({
                     <th className="text-left pb-2 font-medium">Customer</th>
                     <th className="text-left pb-2 font-medium">Fiber</th>
                     <th className="text-right pb-2 font-medium">ADT</th>
-                    <th className="text-right pb-2 font-medium">USD/ADT</th>
+                    <th className="text-right pb-2 font-medium">Net USD/ADT</th>
                   </tr>
                 </thead>
                 <tbody>
