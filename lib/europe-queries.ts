@@ -113,8 +113,12 @@ export async function getEuropeCountrySummaries(params: {
 // ── Country detail ────────────────────────────────────────────────────────────
 
 /**
- * Returns per-fiber volume chart series for a single Europe country.
- * Customers within the country are the chart series.
+ * Returns per-fiber volume chart series for a single Europe country,
+ * grouped by Incoterm (not customer).
+ *
+ * Only rows with a non-null, non-empty incoterm are included in the chart.
+ * Returns an empty object when no incoterm data exists for the country —
+ * the country page shows an explicit empty-state message in that case.
  */
 export async function getEuropeCountryVolumeSeries(params: {
   marketId: string
@@ -124,8 +128,19 @@ export async function getEuropeCountryVolumeSeries(params: {
   const { marketId, country, months } = params
 
   const orders = await prisma.orderRecord.findMany({
-    where: { ...CRM_FILTER, isNetPrice: true, country, cycle: { marketId, month: { in: months } } },
-    include: { fiber: true, customer: true, cycle: true },
+    where: {
+      ...CRM_FILTER,
+      isNetPrice: true,
+      country,
+      incoterm: { not: null, notIn: [""] },
+      cycle: { marketId, month: { in: months } },
+    },
+    select: {
+      incoterm: true,
+      volume: true,
+      fiber: { select: { code: true } },
+      cycle: { select: { month: true } },
+    },
   })
 
   const fiberCodes = [...new Set(orders.map((o) => o.fiber.code))]
@@ -133,18 +148,18 @@ export async function getEuropeCountryVolumeSeries(params: {
 
   for (const fiberCode of fiberCodes) {
     const fiberOrders = orders.filter((o) => o.fiber.code === fiberCode)
-    const customerNames = [...new Set(fiberOrders.map((o) => o.customer.name))]
+    const incoterms = [...new Set(fiberOrders.map((o) => o.incoterm as string))].sort()
 
     const monthMap: Record<string, Record<string, number>> = {}
     for (const m of months) {
       monthMap[m] = {}
-      for (const name of customerNames) monthMap[m][name] = 0
+      for (const inc of incoterms) monthMap[m][inc] = 0
     }
     for (const order of fiberOrders) {
-      const name = order.customer.name
+      const inc = order.incoterm as string
       const month = order.cycle.month
       if (monthMap[month]) {
-        monthMap[month][name] = (monthMap[month][name] ?? 0) + Number(order.volume)
+        monthMap[month][inc] = (monthMap[month][inc] ?? 0) + Number(order.volume)
       }
     }
 
@@ -152,15 +167,16 @@ export async function getEuropeCountryVolumeSeries(params: {
       data: months.map((m) => {
         const point: Record<string, string | number | null> = { month: m.slice(2) }
         let total = 0
-        for (const name of customerNames) {
-          const vol = monthMap[m]?.[name] || null
-          point[name] = vol
+        for (const inc of incoterms) {
+          const vol = monthMap[m]?.[inc] || null
+          point[inc] = vol
           total += vol ?? 0
         }
         point["Total"] = total > 0 ? total : null
         return point
       }),
-      customers: customerNames,
+      // VolumeChartSeries reuses the `customers` field as generic series labels
+      customers: incoterms,
     }
   }
 
@@ -170,6 +186,8 @@ export async function getEuropeCountryVolumeSeries(params: {
 export interface EuropeCountryPricePoint {
   month: string
   customer: string
+  /** Incoterm value, or null when the row predates the Incoterm column. */
+  incoterm: string | null
   fiber: string
   volume: number
   /** USD/ADT — already normalized at import time */
@@ -177,9 +195,17 @@ export interface EuropeCountryPricePoint {
 }
 
 /**
- * Returns per-fiber price chart series AND flat order points for a single
- * Europe country.  Price per (customer, month) is the volume-weighted average
- * when multiple rows exist for the same combination.
+ * Returns per-fiber net-price chart series AND flat order points for a single
+ * Europe country.
+ *
+ * Chart series are grouped by Incoterm (not customer).
+ *   - Rows with null/empty incoterm are excluded from chart series but included
+ *     in allPoints (so they appear in the detail table with an "—" incoterm).
+ *   - Weighted net price formula: sum(price × volume) / sum(volume) per
+ *     (incoterm, month, fiber).
+ *
+ * allPoints includes every net-price row (with or without incoterm) for the
+ * detail table — month, customer, incoterm, volume, net price.
  */
 export async function getEuropeCountryPriceSeries(params: {
   marketId: string
@@ -194,6 +220,7 @@ export async function getEuropeCountryPriceSeries(params: {
   const orders = await prisma.orderRecord.findMany({
     where: { ...CRM_FILTER, isNetPrice: true, country, cycle: { marketId, month: { in: months } } },
     select: {
+      incoterm: true,
       volume: true,
       price: true,
       fiber: { select: { code: true } },
@@ -203,49 +230,53 @@ export async function getEuropeCountryPriceSeries(params: {
     orderBy: [{ cycle: { month: "desc" } }, { customer: { name: "asc" } }],
   })
 
-  const fiberCodes = [...new Set(orders.map((o) => o.fiber.code))]
+  // Chart series: only rows with a real incoterm value
+  const ordersWithIncoterm = orders.filter((o) => o.incoterm && o.incoterm.trim())
+  const fiberCodes = [...new Set(ordersWithIncoterm.map((o) => o.fiber.code))]
   const chartDataByFiber: Record<
     string,
     { data: Record<string, string | number | null>[]; customers: string[] }
   > = {}
 
   for (const fiberCode of fiberCodes) {
-    const fiberOrders = orders.filter((o) => o.fiber.code === fiberCode)
-    const customerNames = [...new Set(fiberOrders.map((o) => o.customer.name))]
+    const fiberOrders = ordersWithIncoterm.filter((o) => o.fiber.code === fiberCode)
+    const incoterms = [...new Set(fiberOrders.map((o) => o.incoterm as string))].sort()
 
-    // Accumulate vol+val per (month, customer) for weighted-avg price
+    // Accumulate vol+val per (month, incoterm) for weighted-avg net price
     const monthMap: Record<string, Record<string, { vol: number; val: number }>> = {}
     for (const m of months) {
       monthMap[m] = {}
-      for (const name of customerNames) monthMap[m][name] = { vol: 0, val: 0 }
+      for (const inc of incoterms) monthMap[m][inc] = { vol: 0, val: 0 }
     }
     for (const order of fiberOrders) {
-      const name = order.customer.name
+      const inc = order.incoterm as string
       const month = order.cycle.month
       const vol = Number(order.volume)
       const price = selectEuropeNetPrice(order)  // net price only
-      if (monthMap[month]?.[name]) {
-        monthMap[month][name].vol += vol
-        monthMap[month][name].val += price * vol
-      }
+      if (!monthMap[month]) monthMap[month] = {}
+      if (!monthMap[month][inc]) monthMap[month][inc] = { vol: 0, val: 0 }
+      monthMap[month][inc].vol += vol
+      monthMap[month][inc].val += price * vol
     }
 
     chartDataByFiber[fiberCode] = {
       data: months.map((m) => {
         const point: Record<string, string | number | null> = { month: m.slice(2) }
-        for (const name of customerNames) {
-          const { vol, val } = monthMap[m]?.[name] ?? { vol: 0, val: 0 }
-          point[name] = vol > 0 ? val / vol : null
+        for (const inc of incoterms) {
+          const { vol, val } = monthMap[m]?.[inc] ?? { vol: 0, val: 0 }
+          point[inc] = vol > 0 ? val / vol : null
         }
         return point
       }),
-      customers: customerNames,
+      customers: incoterms,
     }
   }
 
+  // allPoints: every net-price row (with or without incoterm) for the detail table
   const allPoints: EuropeCountryPricePoint[] = orders.map((o) => ({
     month: o.cycle.month,
     customer: o.customer.name,
+    incoterm: o.incoterm ?? null,
     fiber: o.fiber.code,
     volume: Number(o.volume),
     price: selectEuropeNetPrice(o),  // net price only

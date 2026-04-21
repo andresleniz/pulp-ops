@@ -154,6 +154,11 @@ export interface CRMRow {
    * found in the file — the generic `price` column is used as a fallback.
    */
   netPrice?: number | null
+  /**
+   * Incoterm from the CRM Incoterm column (e.g. "CIF", "CFR", "FOB").
+   * Trimmed at import time; null when the column is absent or blank.
+   */
+  incoterm?: string | null
 }
 
 export interface ImportResult {
@@ -177,6 +182,8 @@ export interface ImportResult {
   // Europe net-price tracking
   europeIsNetPrice: number       // Europe rows stored with isNetPrice = true (from "net price" column)
   europeIsNotNetPrice: number    // Europe rows stored with isNetPrice = false (from generic "price" column)
+  // Incoterm tracking (all markets)
+  withIncoterm: number           // rows where an incoterm value was stored
 }
 
 export interface ImportOptions {
@@ -236,6 +243,7 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
     europeRejectedCurrency: 0,
     europeIsNetPrice: 0,
     europeIsNotNetPrice: 0,
+    withIncoterm: 0,
   }
 
   const markets = await prisma.market.findMany()
@@ -426,6 +434,8 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
       // For Europe orders, store the country name so we can chart by country
       const countryName = marketName === "Europe" ? extractCountryName(row.country) : null
 
+      const incotermValue = row.incoterm?.trim() || null
+
       if (existingOrder) {
         await prisma.orderRecord.update({
           where: { id: existingOrder.id },
@@ -440,6 +450,7 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
             currency: currencyValue,
             priceOriginal: priceOriginalValue !== null ? new Decimal(priceOriginalValue) : null,
             isNetPrice,
+            incoterm: incotermValue,
           },
         })
         result.updated++
@@ -459,6 +470,7 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
             currency: currencyValue,
             priceOriginal: priceOriginalValue !== null ? new Decimal(priceOriginalValue) : null,
             isNetPrice,
+            incoterm: incotermValue,
           },
         })
         result.created++
@@ -497,6 +509,7 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
       if (countryName) result.withCountry++
       if (row.destinationPort?.trim()) result.withDestinationPort++
       if (fiberCode === "EKP MDP") result.withEkpMdp++
+      if (incotermValue) result.withIncoterm++
 
       result.imported++
     } catch (err) {
@@ -513,7 +526,7 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
     newValue:
       `${result.imported} rows (${result.created} created, ${result.updated} updated, ` +
       `${result.evicted} manual rows evicted${replaceNote}) — ` +
-      `country: ${result.withCountry}, port: ${result.withDestinationPort}, EKP MDP: ${result.withEkpMdp}; ` +
+      `country: ${result.withCountry}, port: ${result.withDestinationPort}, EKP MDP: ${result.withEkpMdp}, incoterm: ${result.withIncoterm}; ` +
       `Europe currency: EUR=${result.europeEUR}, USD=${result.europeUSD}, rejected=${result.europeRejectedCurrency}; ` +
       `Europe isNetPrice: true=${result.europeIsNetPrice}, false=${result.europeIsNotNetPrice}`,
     changedBy: "Andrés",
@@ -522,7 +535,7 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
   console.log(
     `[CRM import] Done: ${result.imported} imported, ` +
     `country=${result.withCountry}, destinationPort=${result.withDestinationPort}, ` +
-    `ekpMdp=${result.withEkpMdp}; ` +
+    `ekpMdp=${result.withEkpMdp}, incoterm=${result.withIncoterm}; ` +
     `Europe currency: EUR=${result.europeEUR} USD=${result.europeUSD} rejected=${result.europeRejectedCurrency}; ` +
     `Europe isNetPrice: true=${result.europeIsNetPrice} false=${result.europeIsNotNetPrice}`
   )
@@ -592,6 +605,7 @@ export async function importUSARows(rows: USARow[]): Promise<ImportResult> {
     europeRejectedCurrency: 0,
     europeIsNetPrice: 0,
     europeIsNotNetPrice: 0,
+    withIncoterm: 0,
   }
 
   const usaMarket = await prisma.market.findUnique({ where: { name: "USA" } })

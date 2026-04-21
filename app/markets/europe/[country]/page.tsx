@@ -98,13 +98,14 @@ export default async function EuropeCountryPage({
 
       <div className="space-y-4">
 
-        {/* Volume charts */}
-        {Object.keys(volumeByFiber).length > 0 && (
+        {/* Volume charts — grouped by Incoterm */}
+        {Object.keys(volumeByFiber).length > 0 ? (
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">
-                Volume History — Last 12 Months
+                Volume by Incoterm — Last 12 Months
               </CardTitle>
+              <p className="text-xs text-gray-400 mt-0.5">ADT — net-price rows only</p>
             </CardHeader>
             <CardContent className="space-y-6">
               {Object.entries(volumeByFiber).map(([fiberCode, { data, customers }]) => (
@@ -117,15 +118,25 @@ export default async function EuropeCountryPage({
               ))}
             </CardContent>
           </Card>
+        ) : (
+          <Card>
+            <CardContent className="pt-6 pb-6">
+              <p className="text-sm text-amber-700 bg-amber-50 rounded px-3 py-2">
+                No Incoterm data available yet for {country}. Re-import the CRM file with an
+                &ldquo;Incoterm&rdquo; column to populate Incoterm-grouped volume charts.
+              </p>
+            </CardContent>
+          </Card>
         )}
 
-        {/* Price charts */}
+        {/* Net Price charts — grouped by Incoterm */}
         {Object.keys(chartDataByFiber).length > 0 ? (
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">
-                Net Price History — Last 12 Months (USD/ADT)
+                Net Price by Incoterm — Last 12 Months (USD/ADT)
               </CardTitle>
+              <p className="text-xs text-gray-400 mt-0.5">Volume-weighted average net price</p>
             </CardHeader>
             <CardContent className="space-y-6">
               {Object.entries(chartDataByFiber).map(([fiberCode, { data, customers }]) => (
@@ -149,7 +160,7 @@ export default async function EuropeCountryPage({
           </Card>
         )}
 
-        {/* Order detail table */}
+        {/* Order detail table — month, customer, incoterm, volume, net price */}
         {sortedPoints.length > 0 && (
           <Card>
             <CardHeader className="pb-2">
@@ -161,6 +172,7 @@ export default async function EuropeCountryPage({
                   <tr className="text-xs text-gray-400 border-b">
                     <th className="text-left pb-2 font-medium">Month</th>
                     <th className="text-left pb-2 font-medium">Customer</th>
+                    <th className="text-left pb-2 font-medium">Incoterm</th>
                     <th className="text-left pb-2 font-medium">Fiber</th>
                     <th className="text-right pb-2 font-medium">ADT</th>
                     <th className="text-right pb-2 font-medium">Net USD/ADT</th>
@@ -176,6 +188,9 @@ export default async function EuropeCountryPage({
                     >
                       <td className="py-1.5 text-gray-500">{p.month}</td>
                       <td className="py-1.5">{p.customer}</td>
+                      <td className="py-1.5 text-gray-500 text-xs">
+                        {p.incoterm ?? <span className="text-gray-300">—</span>}
+                      </td>
                       <td className="py-1.5 text-gray-500 text-xs">{p.fiber}</td>
                       <td className="py-1.5 text-right tabular-nums">
                         {p.volume.toLocaleString("en-US", { maximumFractionDigits: 0 })}

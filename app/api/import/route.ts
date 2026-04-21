@@ -38,6 +38,14 @@ const CURRENCY_ALIASES = ["currency", "document currency", "transaction currency
 const NET_PRICE_ALIASES = ["net price", "net", "price net", "net unit price"]
 
 /**
+ * Incoterm column aliases (normalised).  Stored on OrderRecord.incoterm.
+ * Europe country detail charts group volume and net price by Incoterm.
+ * Column is optional — rows without an Incoterm value are still imported;
+ * they are excluded from Incoterm-grouped charts but appear in detail tables.
+ */
+const INCOTERM_ALIASES = ["incoterm", "inco term", "inco_term", "incoterms"]
+
+/**
  * Returns the first non-empty string value found under any of the given aliases.
  * Because all keys in rawRows are normalised, aliases must also be normalised.
  */
@@ -161,12 +169,14 @@ export async function POST(req: NextRequest) {
     const portResolved = DEST_PORT_ALIASES.find((a) => headerRow.includes(a)) ?? "NONE"
     const currencyResolved = CURRENCY_ALIASES.find((a) => headerRow.includes(a)) ?? "NONE"
     const netPriceResolved = NET_PRICE_ALIASES.find((a) => headerRow.includes(a)) ?? "NONE"
+    const incotermResolved = INCOTERM_ALIASES.find((a) => headerRow.includes(a)) ?? "NONE"
 
     console.log("[CRM import] Header row detected at row index:", headerRowIndex)
     console.log("[CRM import] Detected headers:", fileColumns.join(" | "))
     console.log("[CRM import] destinationPort column resolved to:", portResolved)
     console.log("[CRM import] currency column resolved to:", currencyResolved)
     console.log("[CRM import] net price column resolved to:", netPriceResolved)
+    console.log("[CRM import] incoterm column resolved to:", incotermResolved)
     console.log("[CRM import] country present:", headerRow.includes("country"))
     console.log("[CRM import] grade present:", headerRow.includes("grade"))
     console.log("[CRM import] replaceAll:", replaceAll)
@@ -188,6 +198,8 @@ export async function POST(req: NextRequest) {
       currency:        pickColumn(r, CURRENCY_ALIASES),
       // For Europe orders: net price column takes priority over generic "price"
       netPrice:        pickNumericColumn(r, NET_PRICE_ALIASES),
+      // Incoterm — optional; stored when present; null when column absent or blank
+      incoterm:        pickColumn(r, INCOTERM_ALIASES),
     }))
 
     // ── Diagnostic sample (temporary — remove after port fix verified) ─────────
@@ -196,13 +208,14 @@ export async function POST(req: NextRequest) {
       destinationPort: r.destinationPort,
       currency: r.currency,
       netPrice: r.netPrice,
+      incoterm: r.incoterm,
       orderRef: r.orderRef,
       grade: r.grade,
     }))
 
     const options: ImportOptions = { replaceAll }
     const result = await importCRMRows(rows, options)
-    return NextResponse.json({ success: true, result, fileColumns, parsedSample })
+    return NextResponse.json({ success: true, result, fileColumns, parsedSample, incotermResolved })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

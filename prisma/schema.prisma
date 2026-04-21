@@ -333,6 +333,7 @@ model OrderRecord {
   currency        String?   // "EUR" when converted from EUR; null means USD or unknown
   priceOriginal   Decimal?  // original EUR price before EUR→USD conversion
   isNetPrice      Boolean      @default(false) // true = price sourced from "net price" column at CRM import
+  incoterm        String?      // e.g. "CIF", "CFR", "FOB" — parsed from CRM Incoterm column; null when absent
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
   customer        Customer     @relation(fields: [customerId], references: [id])
