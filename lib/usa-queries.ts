@@ -11,9 +11,15 @@
  *   • Arauco Sales uploader  → "Customer — City, ST"  (e.g. "BiOrigin — Wiggins MS")
  *   • CRM importer (USA)     → plain mill-mapped names (e.g. "James Hardie", "Sofidel")
  *
- *   CUSTOMER_NORMALIZE, EXCLUDE, and extractBase() are the authoritative filters
- *   that restrict output to Arauco Sales customers only.  They are shared with
- *   /api/usa-charts/route.ts so the two code paths stay in sync.
+ *   CUSTOMER_NORMALIZE, EXCLUDE, extractBase(), and the freightPerAdmt IS NOT
+ *   NULL guard are the authoritative filters that restrict output to Arauco
+ *   Sales customers only.  They are shared with /api/usa-charts/route.ts so
+ *   the two code paths stay in sync.
+ *
+ *   KEY SIGNAL — freightPerAdmt:
+ *     Arauco Sales importer always stores freightPerAdmt (0 when blank, positive
+ *     when available).  CRM importer never sets it (stays NULL).  Filtering
+ *     freightPerAdmt IS NOT NULL is therefore the reliable Arauco Sales gate.
  */
 
 import { prisma } from "@/lib/prisma"
@@ -31,7 +37,10 @@ export const CUSTOMER_NORMALIZE: Record<string, string> = {
   "atlas paper": "Atlas", "atlas paper mill": "Atlas", "atlas paper mills": "Atlas",
   "atlas southeast": "Atlas", "atlas southeast (smart whse)": "Atlas",
   "atlas southeast - smart whse": "Atlas", "atlas southeast papers": "Atlas",
-  "biorigin": "BiOrigin", "biOrign": "BiOrigin", "biOrign ": "BiOrigin",
+  // "biorign" is the lowercase form of the "BiOrign" typo that appears in some
+  // upload files.  The map lookup is always done after .toLowerCase() so all
+  // keys must be lowercase-only — mixed-case keys are never matched.
+  "biorigin": "BiOrigin", "biorign": "BiOrigin",
   "gp": "Georgia Pacific", "georgia pacific": "Georgia Pacific",
   "georgia pacific (wauna)": "Georgia Pacific",
   "omnia": "Omnia", "omnia advanced materials": "Omnia", "omnia c/o castorland": "Omnia",
@@ -106,6 +115,11 @@ export async function getUSACustomerVolumeSeriesFromSales(params: {
   const orders = await prisma.orderRecord.findMany({
     where: {
       ...CRM_FILTER,
+      // Arauco Sales gate: the Sales importer always stores freightPerAdmt (0
+      // when freight is blank, positive otherwise).  CRM importer never sets it,
+      // leaving NULL.  This filter is the authoritative way to exclude CRM-only
+      // entries (e.g. plain "Sofidel" EKP MDP rows) from the Sales volume chart.
+      freightPerAdmt: { not: null },
       month: { in: months },
       cycle: { marketId },
     },
