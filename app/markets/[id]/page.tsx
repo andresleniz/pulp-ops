@@ -14,7 +14,7 @@ import { USACharts } from "@/components/markets/usa-charts"
 import { VolumeAdjustmentPanel } from "@/components/markets/volume-adjustment-panel"
 import { VolumeChart } from "@/components/markets/volume-chart"
 import { getEffectiveMonthlyPrices } from "@/lib/price-queries"
-import { getVolumeChartData, getMarketDestinationPortVolumes } from "@/lib/volume-queries"
+import { getVolumeChartData, getNorthAmericaCustomerVolumeSeries, getMarketDestinationPortVolumes } from "@/lib/volume-queries"
 import { listMarketTasks } from "@/lib/market-tasks"
 import { getMarketNoteWithFallback } from "@/lib/market-notes"
 import { MarketTasksPanel } from "@/components/markets/market-tasks-panel"
@@ -173,7 +173,11 @@ export default async function MarketDetailPage({
   }
 
   // ── Volume chart data ────────────────────────────────────────────────────
-  const volumeChartByFiber = await getVolumeChartData({ marketId: market.id, months: chartMonths })
+  // USA uses a named entry point (getNorthAmericaCustomerVolumeSeries) so the
+  // aggregation contract is explicit; other markets use the generic helper.
+  const volumeChartByFiber = market.name === "USA"
+    ? await getNorthAmericaCustomerVolumeSeries({ marketId: market.id, months: chartMonths })
+    : await getVolumeChartData({ marketId: market.id, months: chartMonths })
 
   // ── Destination-port volume (nullable — empty when not yet in CRM data) ──
   const destPortVolumes = await getMarketDestinationPortVolumes({ marketId: market.id })
@@ -263,7 +267,67 @@ export default async function MarketDetailPage({
           </Card>
 
           {market.name === "USA" ? (
-            <USACharts />
+            <>
+              <USACharts />
+              {Object.keys(volumeChartByFiber).length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      Monthly Volume by Customer — Last 12 Months
+                    </CardTitle>
+                    <p className="text-xs text-gray-400 mt-0.5">ADT — CRM orders only</p>
+                  </CardHeader>
+                  <CardContent className="space-y-8">
+                    {Object.entries(volumeChartByFiber).map(([fiberCode, { data, customers }]) => (
+                      <div key={fiberCode}>
+                        <VolumeChart fiberCode={fiberCode} data={data} customers={customers} />
+                        {customers.length > 0 && (
+                          <div className="mt-4 overflow-x-auto">
+                            <table className="w-full text-xs text-gray-700 border-collapse">
+                              <thead>
+                                <tr className="bg-gray-50 text-gray-500">
+                                  <th className="text-left px-2 py-1.5 font-medium border border-gray-100 whitespace-nowrap">Customer</th>
+                                  {data.map((d) => (
+                                    <th key={String(d.month)} className="px-2 py-1.5 font-medium border border-gray-100 text-right whitespace-nowrap">
+                                      {d.month}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {customers.map((name) => (
+                                  <tr key={name} className="hover:bg-gray-50">
+                                    <td className="px-2 py-1.5 border border-gray-100 whitespace-nowrap font-medium text-gray-800 max-w-[180px] truncate">
+                                      {name}
+                                    </td>
+                                    {data.map((d) => {
+                                      const v = d[name]
+                                      return (
+                                        <td key={String(d.month)} className="px-2 py-1.5 border border-gray-100 text-right tabular-nums">
+                                          {typeof v === "number" ? v.toLocaleString() : "—"}
+                                        </td>
+                                      )
+                                    })}
+                                  </tr>
+                                ))}
+                                <tr className="bg-gray-50 font-semibold text-gray-900">
+                                  <td className="px-2 py-1.5 border border-gray-100">Total</td>
+                                  {data.map((d) => (
+                                    <td key={String(d.month)} className="px-2 py-1.5 border border-gray-100 text-right tabular-nums">
+                                      {typeof d["Total"] === "number" ? (d["Total"] as number).toLocaleString() : "—"}
+                                    </td>
+                                  ))}
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+            </>
           ) : (
             <>
               {Object.keys(chartDataByFiber).length > 0 && (
