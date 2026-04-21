@@ -83,23 +83,6 @@ export async function getVolumeChartData(params: {
   return result
 }
 
-// ── North America (USA) customer-level volume ────────────────────────────────
-
-/**
- * Returns per-fiber monthly volume grouped by customer for the North America
- * (USA) market.  Delegates to getVolumeChartData — same shape, same source
- * rules (CRM only) — but provides a stable, named entry point for the USA page
- * so aggregation logic stays in this module and the page component stays thin.
- *
- * @returns Record<fiberCode, VolumeChartSeries> — pass directly to VolumeChart.
- */
-export async function getNorthAmericaCustomerVolumeSeries(params: {
-  marketId: string
-  months: string[]
-}): Promise<Record<string, VolumeChartSeries>> {
-  return getVolumeChartData(params)
-}
-
 // ── Europe country-level volume + weighted price ──────────────────────────────
 
 /**

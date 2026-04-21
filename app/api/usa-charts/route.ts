@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { CRM_FILTER } from "@/lib/order-queries"
+import { EXCLUDE, MIN_VOLUME, extractBase } from "@/lib/usa-queries"
 
 function getLastMonths(n: number): string[] {
   const months: string[] = []
@@ -12,45 +13,6 @@ function getLastMonths(n: number): string[] {
     months.push(`${y}-${m}`)
   }
   return months
-}
-
-const CUSTOMER_NORMALIZE: Record<string, string> = {
-  "atlas": "Atlas", "atlas - smart": "Atlas", "atlas - smart whse": "Atlas",
-  "atlas paper": "Atlas", "atlas paper mill": "Atlas", "atlas paper mills": "Atlas",
-  "atlas southeast": "Atlas", "atlas southeast (smart whse)": "Atlas",
-  "atlas southeast - smart whse": "Atlas", "atlas southeast papers": "Atlas",
-  "biorigin": "BiOrigin", "biOrign": "BiOrigin", "biOrign ": "BiOrigin",
-  "gp": "Georgia Pacific", "georgia pacific": "Georgia Pacific",
-  "georgia pacific (wauna)": "Georgia Pacific",
-  "omnia": "Omnia", "omnia advanced materials": "Omnia", "omnia c/o castorland": "Omnia",
-  "royal": "Royal Paper", "royal paper": "Royal Paper",
-  "sapp na c/o  lsw": "Sappi", "sapp na c/o lsw": "Sappi",
-  "sappi": "Sappi", "sappi na/nepw": "Sappi",
-  "seaman": "Seaman", "seaman paper": "Seaman",
-  "twin rivers": "Twin Rivers", "twin rivers (oneida whse)": "Twin Rivers",
-  "twin rivers/fdc": "Twin Rivers", "twin rivers/grand prix": "Twin Rivers",
-  "twin rivers/lfdc": "Twin Rivers", "twin rivers/oneida": "Twin Rivers",
-  "twin rives/lfdc": "Twin Rivers",
-  "neenah": "Neenah", "neenah paper": "Neenah",
-  "barnwell": "Barnwell", "barnwell tissue": "Barnwell",
-  "kruger": "Kruger", "kruger sherbrooke": "Kruger",
-}
-
-const EXCLUDE = new Set([
-  "james hardie", "arauco north america, inc.",
-  "arauco north america inc", "arauco north america",
-])
-
-const MIN_VOLUME = 500
-
-function normalizeName(name: string): string {
-  const key = name.trim().toLowerCase()
-  return CUSTOMER_NORMALIZE[key] ?? name.trim()
-}
-
-function extractBase(fullName: string): string {
-  const base = fullName.split(" — ")[0].trim()
-  return normalizeName(base)
 }
 
 interface WeightedEntry {

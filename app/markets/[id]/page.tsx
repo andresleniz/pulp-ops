@@ -14,7 +14,8 @@ import { USACharts } from "@/components/markets/usa-charts"
 import { VolumeAdjustmentPanel } from "@/components/markets/volume-adjustment-panel"
 import { VolumeChart } from "@/components/markets/volume-chart"
 import { getEffectiveMonthlyPrices } from "@/lib/price-queries"
-import { getVolumeChartData, getNorthAmericaCustomerVolumeSeries, getMarketDestinationPortVolumes } from "@/lib/volume-queries"
+import { getVolumeChartData, getMarketDestinationPortVolumes } from "@/lib/volume-queries"
+import { getUSACustomerVolumeSeriesFromSales } from "@/lib/usa-queries"
 import { listMarketTasks } from "@/lib/market-tasks"
 import { getMarketNoteWithFallback } from "@/lib/market-notes"
 import { MarketTasksPanel } from "@/components/markets/market-tasks-panel"
@@ -173,10 +174,10 @@ export default async function MarketDetailPage({
   }
 
   // ── Volume chart data ────────────────────────────────────────────────────
-  // USA uses a named entry point (getNorthAmericaCustomerVolumeSeries) so the
-  // aggregation contract is explicit; other markets use the generic helper.
+  // USA uses Arauco Sales-specific logic (normalisation + exclusion of CRM-only
+  // entries like James Hardie).  All other markets use the generic helper.
   const volumeChartByFiber = market.name === "USA"
-    ? await getNorthAmericaCustomerVolumeSeries({ marketId: market.id, months: chartMonths })
+    ? await getUSACustomerVolumeSeriesFromSales({ marketId: market.id, months: chartMonths })
     : await getVolumeChartData({ marketId: market.id, months: chartMonths })
 
   // ── Destination-port volume (nullable — empty when not yet in CRM data) ──
