@@ -101,7 +101,20 @@ API routes exist only for file-upload endpoints:
 
 ### Database
 
-SQLite via Prisma, stored at `prisma/pulp_ops.db`. The `DATABASE_URL` is set in `.env`. After any schema change, run `db:generate` then `db:migrate`.
+PostgreSQL via Prisma, hosted on Neon. After any schema change, run `db:generate` then `db:migrate`.
+
+**Two environment variables are required** — both locally (`.env`) and in Vercel project settings:
+
+| Variable | Neon endpoint | Used by |
+|---|---|---|
+| `DATABASE_URL` | Pooler (`*-pooler.*.neon.tech`) | App runtime — all Prisma queries |
+| `DIRECT_URL` | Direct (no `-pooler`) | `prisma migrate deploy` / `prisma migrate dev` only |
+
+Prisma migrations require a PostgreSQL advisory lock that Neon's PgBouncer pooler cannot grant. Without `DIRECT_URL`, `prisma migrate deploy` fails with a P1002 timeout (locally) or a P1012 env-var-not-found error (Vercel build).
+
+Derive `DIRECT_URL` from `DATABASE_URL` by removing `-pooler` from the hostname — everything else (user, password, database, `?sslmode=require`) stays the same. See `.env.example` for the full template.
+
+**Vercel setup:** add both variables under Project → Settings → Environment Variables for Production (and Preview if preview deploys are used).
 
 ### Path Alias
 
