@@ -3,17 +3,6 @@ import { prisma } from "@/lib/prisma"
 import { CRM_FILTER } from "@/lib/order-queries"
 import { EXCLUDE, MIN_VOLUME, extractBase } from "@/lib/usa-queries"
 
-function getLastMonths(n: number): string[] {
-  const months: string[] = []
-  const now = new Date()
-  for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const y = d.getFullYear()
-    const m = String(d.getMonth() + 1).padStart(2, "0")
-    months.push(`${y}-${m}`)
-  }
-  return months
-}
 
 interface WeightedEntry {
   priceVolume: number
@@ -24,8 +13,6 @@ interface WeightedEntry {
 
 export async function GET() {
   try {
-    const ALL_MONTHS = getLastMonths(12)
-
     const usaMarket = await prisma.market.findUnique({ where: { name: "USA" } })
     if (!usaMarket) {
       return NextResponse.json({ error: "USA market not found" }, { status: 404 })
@@ -34,13 +21,23 @@ export async function GET() {
     const cycles = await prisma.monthlyCycle.findMany({
       where: { marketId: usaMarket.id },
       select: { id: true, month: true },
+      orderBy: { month: "asc" },
     })
+
+    // Use the same cycle-based month window as the page (ALL_MONTHS.slice(-12)).
+    // getLastMonths() is calendar-based and diverges from cycle data when CRM
+    // imports don't align with the current calendar month.
+    const ALL_MONTHS = cycles.map((c) => c.month).slice(-12)
 
     const cycleIds = cycles.map((c) => c.id)
 
     const orders = await prisma.orderRecord.findMany({
       where: {
         ...CRM_FILTER,
+        // Arauco Sales gate — must match getUSACustomerVolumeSeriesFromSales.
+        // CRM-only entries (Sofidel EKP MDP, James Hardie) never have freightPerAdmt
+        // set; Sales importer always stores 0 or a positive value.
+        freightPerAdmt: { not: null },
         cycleId: { in: cycleIds },
         month: { in: ALL_MONTHS },
       },
