@@ -3,7 +3,6 @@ import { logAudit } from "@/lib/audit"
 import { isManualPrice } from "@/lib/price-source"
 import { validateOrderWrite, evictManualOrders } from "@/lib/order-validation"
 import Decimal from "decimal.js"
-import { EUR_USD_RATE } from "@/lib/europe-queries"
 
 const COUNTRY_TO_MARKET: Record<string, string> = {
   // Asia Pacific
@@ -184,6 +183,9 @@ export interface ImportResult {
   europeIsNotNetPrice: number    // Europe rows stored with isNetPrice = false (from generic "price" column)
   // Incoterm tracking (all markets)
   withIncoterm: number           // rows where an incoterm value was stored
+  // FX rate tracking
+  fxRateUsed: number | null      // rate entered by user and applied to all EUR rows this import
+  fxRateMisses: number           // Europe EUR rows rejected because no monthly FX rate was provided
 }
 
 export interface ImportOptions {
@@ -195,6 +197,14 @@ export interface ImportOptions {
    * and `fiberId` (EKP MDP) — fields that were absent from historical imports.
    */
   replaceAll?: boolean
+  /**
+   * EUR→USD exchange rate entered by the user for this import.
+   * Required when the file contains Europe rows with currency = EUR.
+   * Applied uniformly to all EUR rows in the batch — one rate per import run.
+   * Stored in OrderRecord.fxRateUsed and OrderRecord.fxMonthUsed for auditability.
+   * EUR rows are rejected (not silently converted) when this is null or ≤ 0.
+   */
+  fxRate?: number | null
 }
 
 /**
@@ -244,6 +254,8 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
     europeIsNetPrice: 0,
     europeIsNotNetPrice: 0,
     withIncoterm: 0,
+    fxRateUsed: options?.fxRate && options.fxRate > 0 ? options.fxRate : null,
+    fxRateMisses: 0,
   }
 
   const markets = await prisma.market.findMany()
@@ -345,22 +357,38 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
 
       // ── Per-row currency routing (Europe only) ────────────────────────────
       // Europe rows MUST carry an explicit Currency column value.
-      // EUR → convert to USD using EUR_USD_RATE.
+      // EUR → convert using monthly rate entered by user; reject if no rate was provided.
       // USD → keep price as-is.
       // null / empty / anything else → reject the row explicitly; do not assume.
       // Non-Europe rows are never subject to currency conversion (pass through).
       let price: number | null = priceRaw
       let priceOriginalValue: number | null = null
       let currencyValue: string | null = null
+      let fxRateUsedValue: number | null = null
+      let fxMonthUsedValue: string | null = null
 
       if (marketName === "Europe") {
         // Normalise both ISO codes ("EUR", "USD") and text labels ("Euro", "US Dollar")
         const raw = (row.currency ?? "").trim().toUpperCase()
         const currencyNorm = raw === "EURO" ? "EUR" : raw === "US DOLLAR" ? "USD" : raw || null
         if (currencyNorm === "EUR") {
-          price = priceRaw !== null ? priceRaw * EUR_USD_RATE : null
+          // Use the monthly FX rate entered by the user for this import run.
+          // Every EUR row in the batch uses the same rate — one rate per import.
+          const fxRate = options?.fxRate
+          if (!fxRate || fxRate <= 0) {
+            result.fxRateMisses++
+            result.skipped++
+            result.rejections.push(
+              `${customerName} ${yearMonth} ${fiberCode}: Europe EUR row rejected — ` +
+              `no EUR→USD rate provided. Enter the monthly rate in the import form.`
+            )
+            continue
+          }
+          price = priceRaw !== null ? priceRaw * fxRate : null
           priceOriginalValue = priceRaw
           currencyValue = "EUR"
+          fxRateUsedValue = fxRate
+          fxMonthUsedValue = yearMonth
           result.europeEUR++
         } else if (currencyNorm === "USD") {
           // Price stays as priceRaw; record the explicit USD source
@@ -451,6 +479,8 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
             priceOriginal: priceOriginalValue !== null ? new Decimal(priceOriginalValue) : null,
             isNetPrice,
             incoterm: incotermValue,
+            fxRateUsed: fxRateUsedValue !== null ? new Decimal(fxRateUsedValue) : null,
+            fxMonthUsed: fxMonthUsedValue,
           },
         })
         result.updated++
@@ -471,6 +501,8 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
             priceOriginal: priceOriginalValue !== null ? new Decimal(priceOriginalValue) : null,
             isNetPrice,
             incoterm: incotermValue,
+            fxRateUsed: fxRateUsedValue !== null ? new Decimal(fxRateUsedValue) : null,
+            fxMonthUsed: fxMonthUsedValue,
           },
         })
         result.created++
@@ -527,7 +559,7 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
       `${result.imported} rows (${result.created} created, ${result.updated} updated, ` +
       `${result.evicted} manual rows evicted${replaceNote}) — ` +
       `country: ${result.withCountry}, port: ${result.withDestinationPort}, EKP MDP: ${result.withEkpMdp}, incoterm: ${result.withIncoterm}; ` +
-      `Europe currency: EUR=${result.europeEUR}, USD=${result.europeUSD}, rejected=${result.europeRejectedCurrency}; ` +
+      `Europe currency: EUR=${result.europeEUR}, USD=${result.europeUSD}, rejected=${result.europeRejectedCurrency}, fxMisses=${result.fxRateMisses}; ` +
       `Europe isNetPrice: true=${result.europeIsNetPrice}, false=${result.europeIsNotNetPrice}`,
     changedBy: "Andrés",
   })
@@ -536,7 +568,7 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
     `[CRM import] Done: ${result.imported} imported, ` +
     `country=${result.withCountry}, destinationPort=${result.withDestinationPort}, ` +
     `ekpMdp=${result.withEkpMdp}, incoterm=${result.withIncoterm}; ` +
-    `Europe currency: EUR=${result.europeEUR} USD=${result.europeUSD} rejected=${result.europeRejectedCurrency}; ` +
+    `Europe currency: EUR=${result.europeEUR} USD=${result.europeUSD} rejected=${result.europeRejectedCurrency} fxMisses=${result.fxRateMisses}; ` +
     `Europe isNetPrice: true=${result.europeIsNetPrice} false=${result.europeIsNotNetPrice}`
   )
 
@@ -606,6 +638,8 @@ export async function importUSARows(rows: USARow[]): Promise<ImportResult> {
     europeIsNetPrice: 0,
     europeIsNotNetPrice: 0,
     withIncoterm: 0,
+    fxRateUsed: null,
+    fxRateMisses: 0,
   }
 
   const usaMarket = await prisma.market.findUnique({ where: { name: "USA" } })

@@ -7,8 +7,9 @@
  *  /markets/europe/[country]   — customer detail (getEuropeCountryVolumeSeries
  *                                                 getEuropeCountryPriceSeries)
  *
- * EUR → USD rate used at import time (crm-importer.ts).
- * All prices stored in the DB are already USD after a re-import.
+ * EUR → USD conversion happens at import time using the monthly rate entered by
+ * the user in the CRM import form (stored in OrderRecord.fxRateUsed).
+ * All prices stored in the DB are already USD — no FX lookup at query time.
  *
  * ── Europe price policy ──────────────────────────────────────────────────────
  * All Europe reports use NET prices only.  `OrderRecord.price` is the
@@ -22,11 +23,6 @@
 import { prisma } from "@/lib/prisma"
 import { CRM_FILTER } from "@/lib/order-queries"
 import type { VolumeChartSeries } from "@/lib/volume-queries"
-
-// ── Constants ────────────────────────────────────────────────────────────────
-
-/** EUR → USD conversion rate applied at CRM import time for Europe orders. */
-export const EUR_USD_RATE = 1.09
 
 // ── Europe price selection rule ───────────────────────────────────────────────
 

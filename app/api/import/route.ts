@@ -95,6 +95,8 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData()
     const file = formData.get("file") as File | null
     const replaceAll = formData.get("replaceAll") === "true"
+    const fxRateStr = formData.get("fxRate") as string | null
+    const fxRate = fxRateStr ? parseFloat(fxRateStr) : null
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
@@ -202,7 +204,26 @@ export async function POST(req: NextRequest) {
       incoterm:        pickColumn(r, INCOTERM_ALIASES),
     }))
 
-    // ── Diagnostic sample (temporary — remove after port fix verified) ─────────
+    // ── Europe EUR pre-validation ─────────────────────────────────────────────
+    // Block the entire import before any DB writes if EUR rows are present but
+    // no valid fxRate was provided. Per-row rejection is not sufficient here —
+    // the whole batch must fail cleanly so the user can re-enter the rate.
+    const hasEuropeEurRows = rows.some((r) => {
+      const raw = (r.currency ?? "").trim().toUpperCase()
+      return raw === "EUR" || raw === "EURO"
+    })
+    if (hasEuropeEurRows && (!fxRate || fxRate <= 0)) {
+      return NextResponse.json(
+        {
+          error:
+            "This file contains Europe rows with currency = EUR. " +
+            "Enter a valid EUR→USD exchange rate (> 0) in the import form before importing.",
+        },
+        { status: 400 },
+      )
+    }
+
+    // ── Diagnostic sample ─────────────────────────────────────────────────────
     const parsedSample = rows.slice(0, 5).map((r) => ({
       country: r.country,
       destinationPort: r.destinationPort,
@@ -213,9 +234,16 @@ export async function POST(req: NextRequest) {
       grade: r.grade,
     }))
 
-    const options: ImportOptions = { replaceAll }
+    const options: ImportOptions = { replaceAll, fxRate }
     const result = await importCRMRows(rows, options)
-    return NextResponse.json({ success: true, result, fileColumns, parsedSample, incotermResolved })
+    return NextResponse.json({
+      success: true,
+      result,
+      fileColumns,
+      parsedSample,
+      incotermResolved,
+      fxRateUsed: result.fxRateUsed,
+    })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
