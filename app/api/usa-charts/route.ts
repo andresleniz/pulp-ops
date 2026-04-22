@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { CRM_FILTER } from "@/lib/order-queries"
 import { EXCLUDE, MIN_VOLUME, extractBase } from "@/lib/usa-queries"
 
 
@@ -33,10 +32,7 @@ export async function GET() {
 
     const orders = await prisma.orderRecord.findMany({
       where: {
-        ...CRM_FILTER,
-        // Arauco Sales gate — must match getUSACustomerVolumeSeriesFromSales.
-        // CRM-only entries (Sofidel EKP MDP, James Hardie) never have freightPerAdmt
-        // set; Sales importer always stores 0 or a positive value.
+        source: "Arauco Sales",
         freightPerAdmt: { not: null },
         cycleId: { in: cycleIds },
         month: { in: ALL_MONTHS },

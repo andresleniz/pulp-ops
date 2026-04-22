@@ -120,6 +120,22 @@ function extractCountryName(countryCode: string | null): string | null {
   return ISO_TO_COUNTRY[iso] ?? null
 }
 
+/**
+ * Canonical form: UPPERCASE code, title-case description.
+ * Merges capitalisation variants like "DAP-Delivery at place" and
+ * "DAP-Delivery at Place" into "DAP-Delivery At Place".
+ */
+export function normalizeIncoterm(raw: string | null | undefined): string | null {
+  const trimmed = (raw ?? "").trim()
+  if (!trimmed) return null
+  const dashIdx = trimmed.indexOf("-")
+  if (dashIdx === -1) return trimmed.toUpperCase()
+  const code = trimmed.slice(0, dashIdx).toUpperCase()
+  const desc = trimmed.slice(dashIdx + 1).trim()
+  const titleDesc = desc.replace(/\b\w/g, (c) => c.toUpperCase())
+  return `${code}-${titleDesc}`
+}
+
 const MONTH_MAP: Record<string, string> = {
   January: "01", February: "02", March: "03", April: "04",
   May: "05", June: "06", July: "07", August: "08",
@@ -462,7 +478,7 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
       // For Europe orders, store the country name so we can chart by country
       const countryName = marketName === "Europe" ? extractCountryName(row.country) : null
 
-      const incotermValue = row.incoterm?.trim() || null
+      const incotermValue = normalizeIncoterm(row.incoterm)
 
       if (existingOrder) {
         await prisma.orderRecord.update({
@@ -722,7 +738,7 @@ export async function importUSARows(rows: USARow[]): Promise<ImportResult> {
           customerId: customer.id,
           fiberId: fEKP.id,
           price: new Decimal(row.price),
-          source: "CRM",
+          source: "Arauco Sales",
         },
       })
 
@@ -736,7 +752,7 @@ export async function importUSARows(rows: USARow[]): Promise<ImportResult> {
             freightPerAdmt: row.freightPerAdmt != null
               ? new Decimal(row.freightPerAdmt)
               : null,
-            source: "CRM",
+            source: "Arauco Sales",
             status: "ordered",
             notes: row.notes ?? null,
             destinationPort: row.destinationPort?.trim() || null,

@@ -16,14 +16,14 @@
  *   Sales customers only.  They are shared with /api/usa-charts/route.ts so
  *   the two code paths stay in sync.
  *
- *   KEY SIGNAL — freightPerAdmt:
- *     Arauco Sales importer always stores freightPerAdmt (0 when blank, positive
- *     when available).  CRM importer never sets it (stays NULL).  Filtering
- *     freightPerAdmt IS NOT NULL is therefore the reliable Arauco Sales gate.
+ *   KEY SIGNAL — source + freightPerAdmt:
+ *     Arauco Sales rows are stored with source = "Arauco Sales" and always have
+ *     freightPerAdmt set (0 when blank, positive otherwise).  CRM rows use
+ *     source = "CRM" and never set freightPerAdmt.  Both filters are applied for
+ *     defence in depth; source is the authoritative discriminator.
  */
 
 import { prisma } from "@/lib/prisma"
-import { CRM_FILTER } from "@/lib/order-queries"
 import type { VolumeChartSeries } from "@/lib/volume-queries"
 
 // ── Shared normalisation constants ────────────────────────────────────────────
@@ -98,10 +98,11 @@ export function extractBase(fullName: string): string {
  * using only Arauco Sales uploader data.
  *
  * Filtering contract (mirrors /api/usa-charts):
- *   1. CRM_FILTER — source = "CRM" (both importers use this)
- *   2. extractBase() normalization — collapses location variants to base name
- *   3. EXCLUDE set — removes non-Sales entries (James Hardie, Arauco NA, …)
- *   4. MIN_VOLUME — drops customers with negligible total ADT
+ *   1. source = "Arauco Sales" — only Arauco Sales uploader data
+ *   2. freightPerAdmt IS NOT NULL — defence-in-depth Arauco Sales gate
+ *   3. extractBase() normalization — collapses location variants to base name
+ *   4. EXCLUDE set — removes non-Sales entries (James Hardie, Arauco NA, …)
+ *   5. MIN_VOLUME — drops customers with negligible total ADT
  *
  * @returns Record<fiberCode, VolumeChartSeries> — pass directly to VolumeChart.
  *          Month keys in data points use the short YY-MM form.
@@ -114,11 +115,7 @@ export async function getUSACustomerVolumeSeriesFromSales(params: {
 
   const orders = await prisma.orderRecord.findMany({
     where: {
-      ...CRM_FILTER,
-      // Arauco Sales gate: the Sales importer always stores freightPerAdmt (0
-      // when freight is blank, positive otherwise).  CRM importer never sets it,
-      // leaving NULL.  This filter is the authoritative way to exclude CRM-only
-      // entries (e.g. plain "Sofidel" EKP MDP rows) from the Sales volume chart.
+      source: "Arauco Sales",
       freightPerAdmt: { not: null },
       month: { in: months },
       cycle: { marketId },
