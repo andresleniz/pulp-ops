@@ -282,6 +282,27 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
   // When replaceAll=true: collect all valid (marketId, month) pairs in this
   // batch, then delete existing CRM orders for those pairs so re-import writes
   // fresh rows with correct country, destinationPort, and fiberId values.
+  //
+  // ══ USER DATA ISOLATION GUARANTEE ════════════════════════════════════════
+  // The deleteMany below is the ONLY destructive operation in this import path.
+  // It is intentionally and exclusively scoped to:
+  //   - OrderRecord rows only (no other table is touched)
+  //   - source = "CRM" only (Manual and "Arauco Sales" rows are never deleted)
+  //   - specific (marketId, month) pairs present in the incoming file
+  //
+  // The following user-owned tables are NEVER touched by any import operation:
+  //   MarketNote   — month-scoped notes entered by users
+  //   MarketTask   — market-scoped tasks created by users
+  //   Task         — cycle tasks auto-generated or manually created
+  //   NegotiationEvent — negotiation records entered by users
+  //   MonthlyCycle — cycles are only created (upserted), NEVER deleted
+  //
+  // MonthlyCycle rows that already have attached MarketNote or MarketTask rows
+  // cannot be deleted even accidentally — PostgreSQL enforces the FK constraint
+  // and would raise an error (onDelete defaults to NO ACTION for optional FKs).
+  //
+  // This guarantee must be preserved in any future modification to this function.
+  // ═════════════════════════════════════════════════════════════════════════
   if (options?.replaceAll) {
     const pairsToDelete = new Map<string, { marketId: string; month: string }>()
     for (const row of rows) {
@@ -296,6 +317,8 @@ export async function importCRMRows(rows: CRMRow[], options?: ImportOptions): Pr
 
     let deleted = 0
     for (const { marketId, month } of pairsToDelete.values()) {
+      // ISOLATION: deleteMany targets ONLY OrderRecord rows with source="CRM".
+      // MarketNote, MarketTask, Task, NegotiationEvent are never touched.
       const del = await prisma.orderRecord.deleteMany({
         where: { source: "CRM", cycle: { marketId, month } },
       })

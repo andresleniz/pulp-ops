@@ -3,14 +3,11 @@ export const dynamic = "force-dynamic"
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import {
-  getEuropeCountryCustomerVolumeSeries,
-  getEuropeCountryCustomerPriceSeries,
-  getEuropeCountryCustomerSummaries,
-  getEuropeCountryIncotermVolumeSeries,
-  getEuropeCountryIncotermPriceSeries,
-  getEuropeCountryIncotermSummaries,
+  getEuropeCustomerIncotermVolumeSeries,
+  getEuropeCustomerIncotermPriceSeries,
+  getEuropeCustomerIncotermSummaries,
 } from "@/lib/europe-queries"
-import { EuropeCountryClient } from "@/components/markets/europe-country-client"
+import { EuropeCustomerClient } from "@/components/markets/europe-customer-client"
 import Link from "next/link"
 
 function monthLabel(month: string): string {
@@ -18,30 +15,37 @@ function monthLabel(month: string): string {
   return new Date(y, m - 1).toLocaleString("en-US", { month: "long", year: "numeric" })
 }
 
-export default async function EuropeCountryPage({
+export default async function EuropeCustomerPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ country: string }>
+  params: Promise<{ country: string; customer: string }>
   searchParams: Promise<{ month?: string }>
 }) {
-  const [{ country: countrySlug }, { month: monthParam }] = await Promise.all([
+  const [{ country: countrySlug, customer: customerSlug }, { month: monthParam }] = await Promise.all([
     params,
     searchParams,
   ])
   const country = decodeURIComponent(countrySlug)
+  const customer = decodeURIComponent(customerSlug)
 
   const europeMarket = await prisma.market.findUnique({ where: { name: "Europe" } })
   if (!europeMarket) notFound()
 
-  // Verify this country exists in our order data
-  const countryExists = await prisma.orderRecord.findFirst({
-    where: { country, cycle: { marketId: europeMarket.id } },
+  // Verify this customer exists for this country in Europe net-price data
+  const customerExists = await prisma.orderRecord.findFirst({
+    where: {
+      source: "CRM",
+      isNetPrice: true,
+      country,
+      cycle: { marketId: europeMarket.id },
+      customer: { name: customer },
+    },
     select: { id: true },
   })
-  if (!countryExists) notFound()
+  if (!customerExists) notFound()
 
-  // ── Month resolution — same rule as main dashboard and Europe overview ────
+  // ── Month resolution ──────────────────────────────────────────────────────
   const today = new Date()
   const maxValidMonth = `${today.getFullYear() + 1}-${String(today.getMonth() + 1).padStart(2, "0")}`
 
@@ -66,26 +70,26 @@ export default async function EuropeCountryPage({
 
   // ── Fetch all data in parallel ────────────────────────────────────────────
   const [
-    customerVolumeSeries,
-    customerPriceSeries,
-    customerSummaries,
     incotermVolumeSeries,
     { chartDataByFiber: incotermPriceSeries, allPoints },
     incotermSummaries,
   ] = await Promise.all([
-    getEuropeCountryCustomerVolumeSeries({ marketId: europeMarket.id, country, months: chartMonths }),
-    getEuropeCountryCustomerPriceSeries({ marketId: europeMarket.id, country, months: chartMonths }),
-    getEuropeCountryCustomerSummaries({ marketId: europeMarket.id, country, months: chartMonths }),
-    getEuropeCountryIncotermVolumeSeries({ marketId: europeMarket.id, country, months: chartMonths }),
-    getEuropeCountryIncotermPriceSeries({ marketId: europeMarket.id, country, months: chartMonths }),
-    getEuropeCountryIncotermSummaries({ marketId: europeMarket.id, country, months: chartMonths }),
+    getEuropeCustomerIncotermVolumeSeries({
+      marketId: europeMarket.id, country, customer, months: chartMonths,
+    }),
+    getEuropeCustomerIncotermPriceSeries({
+      marketId: europeMarket.id, country, customer, months: chartMonths,
+    }),
+    getEuropeCustomerIncotermSummaries({
+      marketId: europeMarket.id, country, customer, months: chartMonths,
+    }),
   ])
 
   // ── KPI strip — computed from allPoints ───────────────────────────────────
   const totalVolume = allPoints.reduce((s, p) => s + p.volume, 0)
   const totalVal = allPoints.reduce((s, p) => s + p.price * p.volume, 0)
   const avgNetPrice = totalVolume > 0 ? totalVal / totalVolume : null
-  const customerCount = new Set(allPoints.map((p) => p.customer)).size
+  const monthsActive = new Set(allPoints.map((p) => p.month)).size
   const incotermCount = new Set(
     allPoints.map((p) => p.incoterm).filter((i): i is string => !!i && i.trim() !== "")
   ).size
@@ -95,32 +99,33 @@ export default async function EuropeCountryPage({
 
       {/* ── Breadcrumb + header ── */}
       <div className="mb-6">
-        <div className="flex items-center gap-1.5 text-xs text-gray-400">
+        <div className="flex items-center gap-1.5 text-xs text-gray-400 flex-wrap">
           <Link href="/" className="hover:text-gray-600">Dashboard</Link>
           <span>›</span>
-          {/* Preserve selected month when navigating back to Europe overview */}
-          <Link
-            href={`/markets/europe?month=${selectedMonth}`}
-            className="hover:text-gray-600"
-          >
+          <Link href={`/markets/europe?month=${selectedMonth}`} className="hover:text-gray-600">
             Europe
           </Link>
           <span>›</span>
-          <span className="text-gray-600">{country}</span>
+          <Link
+            href={`/markets/europe/${encodeURIComponent(country)}?month=${selectedMonth}`}
+            className="hover:text-gray-600"
+          >
+            {country}
+          </Link>
+          <span>›</span>
+          <span className="text-gray-600">{customer}</span>
         </div>
-        <h1 className="text-2xl font-semibold mt-1">{country}</h1>
+        <h1 className="text-2xl font-semibold mt-1">{customer}</h1>
         <p className="text-sm text-gray-500 mt-0.5">
-          Europe · {monthLabel(selectedMonth)} context · Last 12 months shown
+          Europe · {country} · {monthLabel(selectedMonth)} context · Last 12 months shown
         </p>
       </div>
 
-      <EuropeCountryClient
+      <EuropeCustomerClient
         country={country}
+        customer={customer}
         selectedMonth={selectedMonth}
-        kpi={{ totalVolume, avgNetPrice, customerCount, incotermCount }}
-        customerVolumeSeries={customerVolumeSeries}
-        customerPriceSeries={customerPriceSeries}
-        customerSummaries={customerSummaries}
+        kpi={{ totalVolume, avgNetPrice, monthsActive, incotermCount }}
         incotermVolumeSeries={incotermVolumeSeries}
         incotermPriceSeries={incotermPriceSeries}
         incotermSummaries={incotermSummaries}

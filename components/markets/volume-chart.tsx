@@ -14,6 +14,11 @@ const COLORS = [
 const TOTAL_KEY = "Total"
 const TOTAL_COLOR = "#1e293b"
 
+// "Others" is the aggregate series produced when customer count exceeds the chart cap.
+// It gets a fixed neutral color and a dashed stroke to visually distinguish it.
+const OTHERS_KEY = "Others"
+const OTHERS_COLOR = "#94a3b8"
+
 interface Props {
   fiberCode: string
   data: Record<string, string | number | null>[]
@@ -51,17 +56,32 @@ export function VolumeChart({ fiberCode, data, customers }: Props) {
           <Legend
             wrapperStyle={{ fontSize: 12, paddingTop: 8, cursor: "pointer" }}
             onClick={(e) => toggle(e.dataKey as string)}
+            formatter={(value: string) => {
+              const isActive = active === value
+              const isDimmed = active !== null && active !== value
+              return (
+                <span style={{
+                  fontWeight: isActive ? 700 : 400,
+                  opacity: isDimmed ? 0.35 : 1,
+                  cursor: "pointer",
+                }}>
+                  {value}
+                </span>
+              )
+            }}
           />
           {customers.map((name, i) => {
+            const isOthers = name === OTHERS_KEY
             const dimmed = active !== null && active !== name && active !== TOTAL_KEY
             return (
               <Line
                 key={name}
                 type="monotone"
                 dataKey={name}
-                stroke={COLORS[i % COLORS.length]}
+                stroke={isOthers ? OTHERS_COLOR : COLORS[i % COLORS.length]}
                 strokeWidth={active === name ? 3 : 2}
                 strokeOpacity={dimmed ? 0.15 : 1}
+                strokeDasharray={isOthers ? "5 3" : undefined}
                 dot={{ r: 4, strokeWidth: 2, fillOpacity: dimmed ? 0.15 : 1, strokeOpacity: dimmed ? 0.15 : 1 }}
                 activeDot={{ r: 6, onClick: () => toggle(name) }}
                 connectNulls
